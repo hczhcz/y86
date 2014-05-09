@@ -21,10 +21,20 @@ void y86_push_x_addr(Y_data *y, Y_addr data) {
     }
 }
 
-void y86_gen_init(Y_data *y) {
+void y86_gen_save_esp(Y_data *y) {
     y86_push_x(y, 0x89);
     y86_push_x(y, 0x25);
     y86_push_x_addr(y, &(y->ret));
+}
+
+void y86_gen_load_esp(Y_data *y) {
+    y86_push_x(y, 0x8B);
+    y86_push_x(y, 0x25);
+    y86_push_x_addr(y, &(y->ret));
+}
+
+void y86_gen_init(Y_data *y) {
+    y86_gen_save_esp(y);
 }
 
 void y86_gen_reg_update(Y_data *y, Y_reg r) {}
@@ -42,9 +52,7 @@ void y86_gen_pos(Y_data *y) {}
 void y86_gen_stat(Y_data *y) {}
 
 void y86_gen_ret(Y_data *y) {
-    y86_push_x(y, 0x8B);
-    y86_push_x(y, 0x25);
-    y86_push_x_addr(y, &(y->ret));
+    y86_gen_load_esp(y);
     y86_push_x(y, 0xC3);
 }
 
@@ -236,4 +244,6 @@ int main() {
     y86_exec(y);
     printf("hello\n");
     y86_free(y);
+
+    return 0;
 }
