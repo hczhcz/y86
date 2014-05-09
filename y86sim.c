@@ -1,0 +1,230 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include "y86sim.h"
+
+void y86_push_x(Y_data *y, Y_char data) {
+    if (y->x_end < Y_X_INST_SIZE) {
+        y->x_inst[y->x_end] = data;
+        y->x_end++;
+    } else {
+        // Error
+    }
+}
+
+void y86_push_x_addr(Y_data *y, Y_addr data) {
+    if (y->x_end + sizeof(Y_addr) <= Y_X_INST_SIZE) {
+        *((Y_addr *) &(y->x_inst[y->x_end])) = data;
+        y->x_end += sizeof(Y_addr);
+    } else {
+        // Error
+    }
+}
+
+void y86_gen_reg_update(Y_data *y, Y_reg r) {}
+
+void y86_gen_step(Y_data *y) {}
+
+void y86_gen_zf(Y_data *y) {}
+
+void y86_gen_sf(Y_data *y) {}
+
+void y86_gen_of(Y_data *y) {}
+
+void y86_gen_pos(Y_data *y) {}
+
+void y86_gen_stat(Y_data *y) {}
+
+void y86_gen_ret(Y_data *y) {
+    y86_push_x(y, 0x66);
+    y86_push_x(y, 0xBC);
+    y86_push_x_addr(y, &y->ret);
+    y86_push_x(y, 0x66);
+    y86_push_x(y, 0xBC);
+    y86_push_x_addr(y, &y->ret);
+    y86_push_x(y, 0xC3);
+}
+
+void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val, Y_word pos) {
+    switch (op) {
+        case yi_halt:
+            y86_gen_ret(y);
+            break;
+        case yi_nop:
+            //
+            break;
+        case yi_rrmovl:
+            //
+            break;
+        case yi_cmovle:
+            //
+            break;
+        case yi_cmovl:
+            //
+            break;
+        case yi_cmove:
+            //
+            break;
+        case yi_cmovne:
+            //
+            break;
+        case yi_cmovge:
+            //
+            break;
+        case yi_cmovg:
+            //
+            break;
+        case yi_irmovl:
+            //
+            break;
+        case yi_rmmovl:
+            //
+            break;
+        case yi_mrmovl:
+            //
+            break;
+        case yi_addl:
+            //
+            break;
+        case yi_subl:
+            //
+            break;
+        case yi_andl:
+            //
+            break;
+        case yi_xorl:
+            //
+            break;        
+        case yi_jmp:
+            //
+            break;
+        case yi_jle:
+            //
+            break;
+        case yi_jl:
+            //
+            break;
+        case yi_je:
+            //
+            break;
+        case yi_jne:
+            //
+            break;
+        case yi_jge:
+            //
+            break;
+        case yi_jg:
+            //
+            break;
+        case yi_call:
+            //
+            break;
+        case yi_ret:
+            //
+            break;
+        case yi_pushl:
+            //
+            break;
+        case yi_popl:
+            //
+            break;
+        case yi_bad:
+            //
+            break;
+    }
+}
+
+void y86_parse(Y_data *y, Y_char *begin, Y_char *inst, Y_char *end) {
+    while (inst != end) {
+        Y_inst op = *inst;
+        inst++;
+
+        Y_reg ra = yr_nil;
+        Y_reg rb = yr_nil;
+        Y_word val = 0;
+
+        switch (op) {
+            case yi_halt:
+            case yi_nop:
+            case yi_ret:
+                break;
+            case yi_rrmovl:
+            case yi_cmovle:
+            case yi_cmovl:
+            case yi_cmove:
+            case yi_cmovne:
+            case yi_cmovge:
+            case yi_cmovg:
+            case yi_addl:
+            case yi_subl:
+            case yi_andl:
+            case yi_xorl:
+            case yi_pushl:
+            case yi_popl:
+                // Read registers
+                if (inst == end) op = yi_bad;
+                ra = HIGH(*inst);
+                rb = LOW(*inst);
+                inst++;
+
+                break;
+            case yi_irmovl:
+            case yi_rmmovl:
+            case yi_mrmovl:
+                // Read registers
+                if (inst == end) op = yi_bad;
+                ra = HIGH(*inst);
+                rb = LOW(*inst);
+                inst++;
+
+                // Read value
+                if (inst + sizeof(Y_word) > end) op = yi_bad;
+                val = *((Y_word *) inst);
+                inst += sizeof(Y_word);
+
+                break;
+            case yi_jmp:
+            case yi_jle:
+            case yi_jl:
+            case yi_je:
+            case yi_jne:
+            case yi_jge:
+            case yi_jg:
+            case yi_call:
+                // Read value
+                if (inst + sizeof(Y_word) > end) op = yi_bad;
+                val = *((Y_word *) inst);
+                inst += sizeof(Y_word);
+
+                break;
+            case yi_bad:
+            default: ;
+                op = yi_bad;
+
+                break;
+        }
+
+        y86_gen_x(y, op, ra, rb, val, inst - begin);
+    }
+}
+
+Y_data *y86_new() {
+    Y_data *y = calloc(1, sizeof(Y_data));
+    return y;
+}
+
+void y86_exec(Y_data *y) {
+    __asm__ __volatile__ ("movl %%esp, %0\n": "=m"(y->ret));
+    ((Y_func) &(y->x_inst[0]))();
+}
+
+void y86_free(Y_data *y) {
+    free(y);
+}
+
+int main() {
+    Y_data *y = y86_new();
+    y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0, 0);
+    y86_exec(y);
+    printf("hello");
+    free(y);
+}
