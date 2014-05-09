@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/mman.h>
 #include "y86sim.h"
 
 void y86_push_x(Y_data *y, Y_char data) {
@@ -20,6 +21,12 @@ void y86_push_x_addr(Y_data *y, Y_addr data) {
     }
 }
 
+void y86_gen_init(Y_data *y) {
+    y86_push_x(y, 0x89);
+    y86_push_x(y, 0x25);
+    y86_push_x_addr(y, &(y->ret));
+}
+
 void y86_gen_reg_update(Y_data *y, Y_reg r) {}
 
 void y86_gen_step(Y_data *y) {}
@@ -35,12 +42,9 @@ void y86_gen_pos(Y_data *y) {}
 void y86_gen_stat(Y_data *y) {}
 
 void y86_gen_ret(Y_data *y) {
-    y86_push_x(y, 0x66);
-    y86_push_x(y, 0xBC);
-    y86_push_x_addr(y, &y->ret);
-    y86_push_x(y, 0x66);
-    y86_push_x(y, 0xBC);
-    y86_push_x_addr(y, &y->ret);
+    y86_push_x(y, 0x8B);
+    y86_push_x(y, 0x25);
+    y86_push_x_addr(y, &(y->ret));
     y86_push_x(y, 0xC3);
 }
 
@@ -208,23 +212,28 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char *inst, Y_char *end) {
 }
 
 Y_data *y86_new() {
-    Y_data *y = calloc(1, sizeof(Y_data));
+    Y_data *y = mmap(
+        0, sizeof(Y_data),
+        PROT_READ | PROT_WRITE | PROT_EXEC,
+        MAP_PRIVATE | MAP_ANONYMOUS,
+        -1, 0
+    );
+    y86_gen_init(y);
     return y;
 }
 
 void y86_exec(Y_data *y) {
-    __asm__ __volatile__ ("movl %%esp, %0\n": "=m"(y->ret));
-    ((Y_func) &(y->x_inst[0]))();
+    ((Y_func) y->x_inst)();
 }
 
 void y86_free(Y_data *y) {
-    free(y);
+    munmap(y, sizeof(Y_data));
 }
 
 int main() {
     Y_data *y = y86_new();
     y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0, 0);
     y86_exec(y);
-    printf("hello");
-    free(y);
+    printf("hello\n");
+    y86_free(y);
 }
