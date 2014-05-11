@@ -43,8 +43,8 @@ typedef enum {
     ys_hlt = 0x2, // Halted
     ys_adr = 0x3, // Address error
     ys_ins = 0x4, // Instruction error
-    ys_cmp = 0x5, // Non-standard: Compile error
-    ys_run = 0x6, // Non-standard: Runtime error
+    ys_clf = 0x5, // Non-standard: Loader error
+    ys_clc = 0x6, // Non-standard: Compiler, error
     ys_adp = 0x7, // Non-standard: ADR error caused by protected pc
     ys_inp = 0x8  // Non-standard: INS error caused by protected pc
 } Y_stat;
@@ -58,7 +58,6 @@ typedef enum {
     yr_ebp = 0x5,
     yr_esi = 0x6,
     yr_edi = 0x7,
-    #ifdef Y_RECORD_REG
     yr_cnt = 0x8, // Counting, not a register
     yr_cc  = 0x9, // Non-standard: ZF SF OF
     yr_sx  = 0xA, // Non-standard: Step max
@@ -67,9 +66,6 @@ typedef enum {
     yr_pc  = 0xD, // Non-standard: Y inst pointer
     yr_st  = 0xE, // Non-standard: Stat
     yr_nil = 0xF, // Null register holder, not a register
-    #else
-    yr_st  = 0xE,
-    #endif
     yr_cn2 = 0x10 // Another counting
 } Y_reg;
 

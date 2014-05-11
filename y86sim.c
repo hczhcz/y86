@@ -163,6 +163,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
 
 void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
     y86_link_x_map(y, *inst - begin);
+    y->reg[yr_pc] = *inst - begin;
 
     Y_inst op = **inst;
     (*inst)++;
@@ -241,6 +242,8 @@ void y86_load(Y_data *y) {
     Y_char *end = begin + y->reg[yr_len];
 
     while (inst != end) y86_parse(y, begin, &inst, end);
+
+    y->reg[yr_pc] = 0;
 }
 
 void y86_load_file_bin(Y_data *y, FILE *binfile) {
@@ -249,11 +252,11 @@ void y86_load_file_bin(Y_data *y, FILE *binfile) {
     y->reg[yr_len] = fread(&(y->y_inst[0]), sizeof(Y_char), Y_Y_INST_SIZE, binfile);
     if (ferror(binfile)) {
         fprintf(stderr, "fread() failed (0x%x)\n", y->reg[yr_len]);
-        longjmp(y->jmp, ys_cmp);
+        longjmp(y->jmp, ys_clf);
     }
     if (!feof(binfile)) {
         fprintf(stderr, "Too large memory footprint (0x%x)\n", y->reg[yr_len]);
-        longjmp(y->jmp, ys_cmp);
+        longjmp(y->jmp, ys_clf);
     }
 }
 
@@ -265,7 +268,7 @@ void y86_load_file(Y_data *y, Y_char *fname) {
         fclose(binfile);
     } else {
         fprintf(stderr, "Can't open binary file '%s'\n", fname);
-        longjmp(y->jmp, ys_cmp);
+        longjmp(y->jmp, ys_clf);
     }
 }
 
@@ -284,7 +287,6 @@ Y_data *y86_new() {
 }
 
 void y86_debug_exec(Y_data *y) {
-    fprintf(stderr, "hello\n");
     y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0);
     y->reg[yr_st] = ys_hlt;
 }
@@ -308,10 +310,10 @@ void f_usage(Y_char *pname) {
 Y_word f_main(Y_char *fname, Y_word step) {
     Y_data *y = y86_new();
     Y_word result;
-    Y_word jmp = setjmp(y->jmp);
+    Y_size index;
+    y->reg[yr_st] = setjmp(y->jmp);
 
-
-    if (!jmp) {
+    if (!(y->reg[yr_st])) {
         // Load
         y86_load_file(y, fname);
         y86_load(y);
@@ -320,13 +322,80 @@ Y_word f_main(Y_char *fname, Y_word step) {
         #ifdef Y_DEBUG
         y86_debug_exec(y);
         #endif
+
+        y->reg[yr_sx] = step;
+        y->reg[yr_sc] = 0;
+        y->reg[yr_st] = ys_aok;
         y86_exec(y);
     } else {
-        y->reg[yr_st] = jmp;
         // Jumped out
     }
 
     // Output
+    switch (y->reg[yr_st]) {
+        case ys_adr:
+            fprintf(stdout, "PC = 0x%x, Invalid instruction address\n", y->reg[yr_pc]);
+            break;
+        case ys_ins:
+            fprintf(stdout, "PC = 0x%x, Invalid instruction\n", y->reg[yr_pc]);
+            break;
+        case ys_clf:
+            fprintf(stdout, "PC = 0x%x, File loading failed\n", /*y->reg[yr_pc]*/ 0);
+            break;
+        case ys_clc:
+            fprintf(stdout, "PC = 0x%x, Parsing or compiling failed\n", y->reg[yr_pc]);
+            break;
+        case ys_adp:
+            fprintf(stdout, "PC = 0x%x, Invalid instruction address detected staticly\n", y->reg[yr_pc]);
+            break;
+        case ys_inp:
+            fprintf(stdout, "PC = 0x%x, Invalid instruction detected staticly\n", y->reg[yr_pc]);
+            break;
+        default:
+            break;
+    }
+
+    const char *stat_names[4] = {
+        "AOK", "HLT", "ADR", "INS"
+    };
+    const char *cc_names[8] = {
+        "Z=0 S=0 O=0",
+        "Z=0 S=0 O=1",
+        "Z=0 S=1 O=0",
+        "Z=0 S=1 O=1",
+        "Z=1 S=0 O=0",
+        "Z=1 S=0 O=1",
+        "Z=1 S=1 O=0",
+        "Z=1 S=1 O=1"
+    };
+
+    fprintf(
+        stdout,
+        "Stopped in %d steps at PC = 0x%x.  Status '%s', CC %s\n",
+        y->reg[yr_sc], y->reg[yr_pc], stat_names[y->reg[yr_st]], cc_names[y->reg[yr_cc]]
+    );
+
+
+    const char *reg_names[yr_cnt] = {
+        "%eax", "%ecx", "%edx", "%ebx", "%esp", "%ebp", "%esi", "%edi"
+    };
+
+    y->reg[1] = 2333;
+
+    fprintf(stdout, "Changes to registers:\n");
+    for (index = 0; index < yr_cnt; ++index) {
+        if (y->reg[index]) {
+            fprintf(stdout, "%s:\t0x%.8x\t0x%.8x\n", reg_names[index], 0, y->reg[index]);
+        }
+    }
+
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Changes to memory:\n");
+    for (index = 0; index < Y_MEM_SIZE; ++index) {
+        if (y->mem[index]) {
+            fprintf(stdout, "0x%.4x:\t0x%.8x\t0x%.8x\n", index, 0, y->mem[index]);
+        }
+    }
 
 
     // Return
