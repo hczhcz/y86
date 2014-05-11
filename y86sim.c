@@ -21,7 +21,7 @@ void y86_push_x_addr(Y_data *y, Y_addr value) {
     }
 }
 
-void y86_link_x_map(Y data *y, Y_word pos) {
+void y86_link_x_map(Y_data *y, Y_word pos) {
     if (pos < Y_Y_INST_SIZE) {
         y->x_map[pos] = y->x_end;
     } else {
@@ -45,6 +45,17 @@ void y86_gen_init(Y_data *y) {
     y86_gen_save_esp(y);
 }
 
+/*void y86_gen_call(Y_data *y, Y_addr target) {
+    y86_gen_load_esp(y);
+    //target-&(y->x_inst[y->x_end])-sizeof(y_addr)
+    y86_gen_save_esp(y);
+}*/
+
+void y86_gen_ret(Y_data *y) {
+    y86_gen_load_esp(y);
+    y86_push_x(y, 0xC3);
+}
+
 void y86_gen_reg_update(Y_data *y, Y_reg r) {}
 
 void y86_gen_step(Y_data *y) {}
@@ -58,11 +69,6 @@ void y86_gen_of(Y_data *y) {}
 void y86_gen_pos(Y_data *y) {}
 
 void y86_gen_stat(Y_data *y) {}
-
-void y86_gen_ret(Y_data *y) {
-    y86_gen_load_esp(y);
-    y86_push_x(y, 0xC3);
-}
 
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
     switch (op) {
@@ -253,7 +259,7 @@ void y86_free(Y_data *y) {
 
 int main() {
     Y_data *y = y86_new();
-    y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0, 0);
+    y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0);
     y86_exec(y);
     printf("hello\n");
     y86_free(y);
