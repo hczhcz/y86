@@ -10,7 +10,6 @@
 #define Y_MEM_MASK 0x1FFF
 #define Y_X_INST_SIZE 0x1000
 #define Y_Y_INST_SIZE 0x0200
-#define Y_RECORD_REG // Store state as data
 #define Y_PROTECT_MEM // Protect mem[>= mem_size]
 #define Y_DEBUG
 // #define Y_STEP_MAX_DEFAULT 10000

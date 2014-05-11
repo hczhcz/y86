@@ -401,11 +401,7 @@ void y86_free(Y_data *y) {
 }
 
 void f_usage(Y_char *pname) {
-    #ifdef Y_RECORD_REG
     fprintf(stderr, "Usage: %s file.bin [max_steps]\n", pname);
-    #else
-    fprintf(stderr, "Usage: %s file.bin\n", pname);
-    #endif
 }
 
 Y_word f_main(Y_char *fname, Y_word step) {
@@ -443,11 +439,8 @@ int main(int argc, char *argv[]) {
         // Correct arg
         case 2:
             return f_main(argv[1], 10000);
-
-        #ifdef Y_RECORD_REG
         case 3:
             return f_main(argv[1], atoi(argv[2]));
-        #endif
 
         // Bad arg or no arg
         default:
