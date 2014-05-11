@@ -1,7 +1,7 @@
+#include "y86sim.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/mman.h>
-#include "y86sim.h"
 
 void y86_push_x(Y_data *y, Y_char value) {
     if (y->x_end < &(y->x_inst[Y_X_INST_SIZE])) {
@@ -161,79 +161,111 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
     }
 }
 
-void y86_parse(Y_data *y, Y_char *begin, Y_char *inst, Y_char *end) {
-    while (inst != end) {
-        y86_link_x_map(y, inst - begin);
+void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
+    y86_link_x_map(y, *inst - begin);
 
-        Y_inst op = *inst;
-        inst++;
+    Y_inst op = **inst;
+    (*inst)++;
 
-        Y_reg ra = yr_nil;
-        Y_reg rb = yr_nil;
-        Y_word val = 0;
+    Y_reg ra = yr_nil;
+    Y_reg rb = yr_nil;
+    Y_word val = 0;
 
-        switch (op) {
-            case yi_halt:
-            case yi_nop:
-            case yi_ret:
-                break;
-            case yi_rrmovl:
-            case yi_cmovle:
-            case yi_cmovl:
-            case yi_cmove:
-            case yi_cmovne:
-            case yi_cmovge:
-            case yi_cmovg:
-            case yi_addl:
-            case yi_subl:
-            case yi_andl:
-            case yi_xorl:
-            case yi_pushl:
-            case yi_popl:
-                // Read registers
-                if (inst == end) op = yi_bad;
-                ra = HIGH(*inst);
-                rb = LOW(*inst);
-                inst++;
+    switch (op) {
+        case yi_halt:
+        case yi_nop:
+        case yi_ret:
+            break;
+        case yi_rrmovl:
+        case yi_cmovle:
+        case yi_cmovl:
+        case yi_cmove:
+        case yi_cmovne:
+        case yi_cmovge:
+        case yi_cmovg:
+        case yi_addl:
+        case yi_subl:
+        case yi_andl:
+        case yi_xorl:
+        case yi_pushl:
+        case yi_popl:
+            // Read registers
+            if (*inst == end) op = yi_bad;
+            ra = HIGH(**inst);
+            rb = LOW(**inst);
+            (*inst)++;
 
-                break;
-            case yi_irmovl:
-            case yi_rmmovl:
-            case yi_mrmovl:
-                // Read registers
-                if (inst == end) op = yi_bad;
-                ra = HIGH(*inst);
-                rb = LOW(*inst);
-                inst++;
+            break;
+        case yi_irmovl:
+        case yi_rmmovl:
+        case yi_mrmovl:
+            // Read registers
+            if (*inst == end) op = yi_bad;
+            ra = HIGH(**inst);
+            rb = LOW(**inst);
+            (*inst)++;
 
-                // Read value
-                if (inst + sizeof(Y_word) > end) op = yi_bad;
-                val = *((Y_word *) inst);
-                inst += sizeof(Y_word);
+            // Read value
+            if (*inst + sizeof(Y_word) > end) op = yi_bad;
+            val = *((Y_word *) *inst);
+            *inst += sizeof(Y_word);
 
-                break;
-            case yi_jmp:
-            case yi_jle:
-            case yi_jl:
-            case yi_je:
-            case yi_jne:
-            case yi_jge:
-            case yi_jg:
-            case yi_call:
-                // Read value
-                if (inst + sizeof(Y_word) > end) op = yi_bad;
-                val = *((Y_word *) inst);
-                inst += sizeof(Y_word);
+            break;
+        case yi_jmp:
+        case yi_jle:
+        case yi_jl:
+        case yi_je:
+        case yi_jne:
+        case yi_jge:
+        case yi_jg:
+        case yi_call:
+            // Read value
+            if (*inst + sizeof(Y_word) > end) op = yi_bad;
+            val = *((Y_word *) *inst);
+            *inst += sizeof(Y_word);
 
-                break;
-            case yi_bad:
-            default:
-                op = yi_bad;
+            break;
+        case yi_bad:
+        default:
+            op = yi_bad;
 
-                break;
-        }
+            break;
+    }
 
-        y86_gen_x(y, op, ra, rb, val);
+    y86_gen_x(y, op, ra, rb, val);
+}
+
+void y86_load(Y_data *y) {
+    Y_char *begin = &(y->y_inst[0]);
+    Y_char *inst = begin;
+    Y_char *end = begin + y->reg[yr_len];
+
+    while (inst != end) y86_parse(y, begin, &inst, end);
+}
+
+void y86_load_file_bin(Y_data *y, FILE *binfile) {
+    clearerr(binfile);
+
+    y->reg[yr_len] = fread(&(y->y_inst[0]), sizeof(Y_char), Y_Y_INST_SIZE, binfile);
+    if (ferror(binfile)) {
+        fprintf(stderr, "fread() failed (0x%x)\n", y->reg[yr_len]);
+        longjmp(y->jmp, ys_cmp);
+    }
+    if (!feof(binfile)) {
+        fprintf(stderr, "Too large memory footprint (0x%x)\n", y->reg[yr_len]);
+        longjmp(y->jmp, ys_cmp);
+    }
+}
+
+void y86_load_file(Y_data *y, Y_char *fname) {
+    FILE *binfile = fopen(fname, "rb");
+
+    if (binfile) {
+        y86_load_file_bin(y, binfile);
+        fclose(binfile);
+    } else {
+        fprintf(stderr, "Can't open binary file '%s'\n", fname);
+        longjmp(y->jmp, ys_cmp);
     }
 }
 
@@ -273,74 +305,45 @@ void f_usage(Y_char *pname) {
     #endif
 }
 
-void f_load_file_bin(FILE *binfile, Y_char *dest) {
-    Y_size len;
-
-    clearerr(binfile);
-
-    len = fread(dest, sizeof(Y_char), Y_Y_INST_SIZE, binfile);
-    if (ferror(binfile)) {
-        fprintf(stderr, "fread() failed (0x%x)\n", len);
-    }
-    if (!feof(binfile)) {
-        fprintf(stderr, "too large memory footprint (0x%x)\n", len);
-    }
-}
-
-Y_word f_load_file(Y_char *fname, Y_char *dest) {
-    FILE *binfile = fopen(fname, "rb");
-
-    if (binfile) {
-        f_load_file_bin(binfile, dest);
-        fclose(binfile);
-        return ys_rdy;
-    } else {
-        fprintf(stderr, "Can't open binary file '%s'\n", fname);
-        return ys_cmp;
-    }
-}
-
 Y_word f_main(Y_char *fname, Y_word step) {
-    Y_word result;
     Y_data *y = y86_new();
+    Y_word result;
+    Y_word jmp = setjmp(y->jmp);
 
-    // Load
-    result = f_load_file(fname, &(y->y_inst[0]));
-    if (result != ys_rdy) return result;
 
-    // Exec
-    #ifdef Y_DEBUG
-    y86_debug_exec(y);
-    #endif
-    y86_exec(y);
+    if (!jmp) {
+        // Load
+        y86_load_file(y, fname);
+        y86_load(y);
+
+        // Exec
+        #ifdef Y_DEBUG
+        y86_debug_exec(y);
+        #endif
+        y86_exec(y);
+    } else {
+        y->reg[yr_st] = jmp;
+        // Jumped out
+    }
 
     // Output
 
 
     // Return
-    #ifdef Y_RECORD_REG
     result = y->reg[yr_st];
-    #else
-    result = ys_hlt;
-    #endif
-
     y86_free(y);
-    return result;
+    return result != ys_hlt;
 }
 
 int main(int argc, char *argv[]) {
-    Y_word result;
-
     switch (argc) {
         // Correct arg
         case 2:
-            result = f_main(argv[1], 10000);
-            return result != ys_hlt;
+            return f_main(argv[1], 10000);
 
         #ifdef Y_RECORD_REG
         case 3:
-            result = f_main(argv[1], atoi(argv[2]));
-            return result != ys_hlt;
+            return f_main(argv[1], atoi(argv[2]));
         #endif
 
         // Bad arg or no arg

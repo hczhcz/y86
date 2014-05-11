@@ -1,6 +1,8 @@
 #ifndef _Y86_SIM_
 #define _Y86_SIM_
 
+#include <setjmp.h>
+
 #define HIGH(pack) ((pack) >> 4 & 0xF)
 #define LOW(pack) ((pack) & 0xF)
 
@@ -56,12 +58,12 @@ typedef enum {
     yr_ebp = 0x5,
     yr_esi = 0x6,
     yr_edi = 0x7,
-    yr_cnt = 0x8, // Counting, not a register
     #ifdef Y_RECORD_REG
-    yr_rsv = 0x9, // Reserved, not a register
+    yr_cnt = 0x8, // Counting, not a register
+    yr_cc  = 0x9, // Non-standard: ZF SF OF
     yr_sx  = 0xA, // Non-standard: Step max
     yr_sc  = 0xB, // Non-standard: Step counter
-    yr_cc  = 0xC, // Non-standard: ZF SF OF
+    yr_len = 0xC, // Non-standard: Y inst size
     yr_pc  = 0xD, // Non-standard: Y inst pointer
     yr_st  = 0xE, // Non-standard: Stat
     yr_nil = 0xF, // Null register holder, not a register
@@ -77,9 +79,8 @@ typedef struct {
     Y_char x_inst[Y_X_INST_SIZE];
     Y_char *x_end;
     Y_char *(x_map[Y_Y_INST_SIZE]);
-    // #ifdef Y_RECORD_REG
     Y_word reg[yr_cn2];
-    // #endif
+    jmp_buf jmp;
 } Y_data;
 
 #endif
