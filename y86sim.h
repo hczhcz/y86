@@ -15,6 +15,7 @@
 
 typedef char Y_char;
 typedef int Y_word;
+typedef unsigned int Y_size;
 typedef void (*Y_func)(void);
 typedef void *Y_addr;
 

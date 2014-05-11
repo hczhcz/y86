@@ -21,7 +21,7 @@ void y86_push_x_addr(Y_data *y, Y_addr value) {
     }
 }
 
-void y86_link_x_map(Y_data *y, Y_word pos) {
+void y86_link_x_map(Y_data *y, Y_size pos) {
     if (pos < Y_Y_INST_SIZE) {
         y->x_map[pos] = y->x_end;
     } else {
@@ -252,7 +252,7 @@ Y_data *y86_new() {
 }
 
 void y86_debug_exec(Y_data *y) {
-    fprintf(stdout, "hello\n");
+    fprintf(stderr, "hello\n");
     y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0);
     y->reg[yr_st] = ys_hlt;
 }
@@ -265,33 +265,50 @@ void y86_free(Y_data *y) {
     munmap(y, sizeof(Y_data));
 }
 
-void f_usage(char *pname) {
+void f_usage(Y_char *pname) {
     #ifdef Y_RECORD_REG
-    fprintf(stdout, "Usage: %s file.bin [max_steps]\n", pname);
+    fprintf(stderr, "Usage: %s file.bin [max_steps]\n", pname);
     #else
-    fprintf(stdout, "Usage: %s file.bin\n", pname);
+    fprintf(stderr, "Usage: %s file.bin\n", pname);
     #endif
 }
 
-Y_word f_exec(char *fname, Y_word step) {
+void f_load_file_bin(FILE *binfile, Y_char *dest) {
+    Y_size len;
+
+    clearerr(binfile);
+
+    len = fread(dest, sizeof(Y_char), Y_Y_INST_SIZE, binfile);
+    if (ferror(binfile)) {
+        fprintf(stderr, "fread() failed (0x%x)\n", len);
+    }
+    if (!feof(binfile)) {
+        fprintf(stderr, "too large memory footprint (0x%x)\n", len);
+    }
+}
+
+Y_word f_load_file(Y_char *fname, Y_char *dest) {
+    FILE *binfile = fopen(fname, "rb");
+
+    if (binfile) {
+        f_load_file_bin(binfile, dest);
+        fclose(binfile);
+        return ys_rdy;
+    } else {
+        fprintf(stderr, "Can't open binary file '%s'\n", fname);
+        return ys_cmp;
+    }
+}
+
+Y_word f_main(Y_char *fname, Y_word step) {
     Y_word result;
     Y_data *y = y86_new();
 
     // Load
-    FILE *binfile = fopen(fname, "rb");
-    if (binfile) {
-        //
-
-
-        fclose(binfile);
-    } else {
-        fprintf(stdout, "Can't open binary file '%s'", fname);
-        fclose(binfile);
-        return ys_cmp;
-    }
+    result = f_load_file(fname, &(y->y_inst[0]));
+    if (result != ys_rdy) return result;
 
     // Exec
-
     #ifdef Y_DEBUG
     y86_debug_exec(y);
     #endif
@@ -301,7 +318,6 @@ Y_word f_exec(char *fname, Y_word step) {
 
 
     // Return
-
     #ifdef Y_RECORD_REG
     result = y->reg[yr_st];
     #else
@@ -318,12 +334,12 @@ int main(int argc, char *argv[]) {
     switch (argc) {
         // Correct arg
         case 2:
-            result = f_exec(argv[1], 10000);
+            result = f_main(argv[1], 10000);
             return result != ys_hlt;
 
         #ifdef Y_RECORD_REG
         case 3:
-            result = f_exec(argv[1], atoi(argv[2]));
+            result = f_main(argv[1], atoi(argv[2]));
             return result != ys_hlt;
         #endif
 
