@@ -156,6 +156,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
         case yi_bad:
             //
             break;
+        default:
+            break;
     }
 }
 
@@ -225,7 +227,7 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char *inst, Y_char *end) {
 
                 break;
             case yi_bad:
-            default: ;
+            default:
                 op = yi_bad;
 
                 break;
@@ -249,6 +251,12 @@ Y_data *y86_new() {
     return y;
 }
 
+void y86_debug_exec(Y_data *y) {
+    fprintf(stdout, "hello\n");
+    y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0);
+    y->reg[yr_st] = ys_hlt;
+}
+
 void y86_exec(Y_data *y) {
     ((Y_func) y->x_inst)();
 }
@@ -257,12 +265,71 @@ void y86_free(Y_data *y) {
     munmap(y, sizeof(Y_data));
 }
 
-int main() {
-    Y_data *y = y86_new();
-    y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0);
-    y86_exec(y);
-    printf("hello\n");
-    y86_free(y);
+void f_usage(char *pname) {
+    #ifdef Y_RECORD_REG
+    fprintf(stdout, "Usage: %s file.bin [max_steps]\n", pname);
+    #else
+    fprintf(stdout, "Usage: %s file.bin\n", pname);
+    #endif
+}
 
-    return 0;
+Y_word f_exec(char *fname, Y_word step) {
+    Y_word result;
+    Y_data *y = y86_new();
+
+    // Load
+    FILE *binfile = fopen(fname, "rb");
+    if (binfile) {
+        //
+
+
+        fclose(binfile);
+    } else {
+        fprintf(stdout, "Can't open binary file '%s'", fname);
+        fclose(binfile);
+        return ys_cmp;
+    }
+
+    // Exec
+
+    #ifdef Y_DEBUG
+    y86_debug_exec(y);
+    #endif
+    y86_exec(y);
+
+    // Output
+
+
+    // Return
+
+    #ifdef Y_RECORD_REG
+    result = y->reg[yr_st];
+    #else
+    result = ys_hlt;
+    #endif
+
+    y86_free(y);
+    return result;
+}
+
+int main(int argc, char *argv[]) {
+    Y_word result;
+
+    switch (argc) {
+        // Correct arg
+        case 2:
+            result = f_exec(argv[1], 10000);
+            return result != ys_hlt;
+
+        #ifdef Y_RECORD_REG
+        case 3:
+            result = f_exec(argv[1], atoi(argv[2]));
+            return result != ys_hlt;
+        #endif
+
+        // Bad arg or no arg
+        default:
+            f_usage(argv[0]);
+            return 0;
+    }
 }
