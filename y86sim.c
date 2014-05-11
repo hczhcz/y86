@@ -285,6 +285,80 @@ void y86_load_file(Y_data *y, Y_char *fname) {
     }
 }
 
+void y86_output_error(Y_data *y) {
+    switch (y->reg[yr_st]) {
+        case ys_adr:
+            fprintf(stdout, "PC = 0x%x, Invalid instruction address\n", y->reg[yr_pc]);
+            break;
+        case ys_ins:
+            fprintf(stdout, "PC = 0x%x, Invalid instruction\n", y->reg[yr_pc]);
+            break;
+        case ys_clf:
+            fprintf(stdout, "PC = 0x%x, File loading failed\n", /*y->reg[yr_pc]*/ 0);
+            break;
+        case ys_ccf:
+            fprintf(stdout, "PC = 0x%x, Parsing or compiling failed\n", y->reg[yr_pc]);
+            break;
+        case ys_adp:
+            fprintf(stdout, "PC = 0x%x, Invalid instruction address detected staticly\n", y->reg[yr_pc]);
+            break;
+        case ys_inp:
+            fprintf(stdout, "PC = 0x%x, Invalid instruction detected staticly\n", y->reg[yr_pc]);
+            break;
+        default:
+            break;
+    }
+}
+
+void y86_output_state(Y_data *y) {
+    const char *stat_names[4] = {
+        "AOK", "HLT", "ADR", "INS"
+    };
+
+    const char *cc_names[8] = {
+        "Z=0 S=0 O=0",
+        "Z=0 S=0 O=1",
+        "Z=0 S=1 O=0",
+        "Z=0 S=1 O=1",
+        "Z=1 S=0 O=0",
+        "Z=1 S=0 O=1",
+        "Z=1 S=1 O=0",
+        "Z=1 S=1 O=1"
+    };
+
+    fprintf(
+        stdout,
+        "Stopped in %d steps at PC = 0x%x.  Status '%s', CC %s\n",
+        y->reg[yr_sc], y->reg[yr_pc], stat_names[y->reg[yr_st]], cc_names[y->reg[yr_cc]]
+    );
+}
+
+void y86_output_reg(Y_data *y) {
+    Y_size index;
+
+    const char *reg_names[yr_cnt] = {
+        "%eax", "%ecx", "%edx", "%ebx", "%esp", "%ebp", "%esi", "%edi"
+    };
+
+    fprintf(stdout, "Changes to registers:\n");
+    for (index = 0; index < yr_cnt; ++index) {
+        if (y->reg[index]) {
+            fprintf(stdout, "%s:\t0x%.8x\t0x%.8x\n", reg_names[index], 0, y->reg[index]);
+        }
+    }
+}
+
+void y86_output_mem(Y_data *y) {
+    Y_size index;
+
+    fprintf(stdout, "Changes to memory:\n");
+    for (index = 0; index < Y_MEM_SIZE; ++index) {
+        if (y->mem[index]) {
+            fprintf(stdout, "0x%.4x:\t0x%.8x\t0x%.8x\n", index, 0, y->mem[index]);
+        }
+    }
+}
+
 Y_data *y86_new() {
     Y_data *y = mmap(
         0, sizeof(Y_data),
@@ -314,6 +388,14 @@ void y86_exec(Y_data *y) {
     ((Y_func) y->x_inst)();
 }
 
+void y86_output(Y_data *y) {
+    y86_output_error(y);
+    y86_output_state(y);
+    y86_output_reg(y);
+    fprintf(stdout, "\n");
+    y86_output_mem(y);
+}
+
 void y86_free(Y_data *y) {
     munmap(y, sizeof(Y_data));
 }
@@ -329,7 +411,6 @@ void f_usage(Y_char *pname) {
 Y_word f_main(Y_char *fname, Y_word step) {
     Y_data *y = y86_new();
     Y_word result;
-    Y_size index;
     y->reg[yr_st] = setjmp(y->jmp);
 
     if (!(y->reg[yr_st])) {
@@ -349,69 +430,7 @@ Y_word f_main(Y_char *fname, Y_word step) {
     }
 
     // Output
-    switch (y->reg[yr_st]) {
-        case ys_adr:
-            fprintf(stdout, "PC = 0x%x, Invalid instruction address\n", y->reg[yr_pc]);
-            break;
-        case ys_ins:
-            fprintf(stdout, "PC = 0x%x, Invalid instruction\n", y->reg[yr_pc]);
-            break;
-        case ys_clf:
-            fprintf(stdout, "PC = 0x%x, File loading failed\n", /*y->reg[yr_pc]*/ 0);
-            break;
-        case ys_ccf:
-            fprintf(stdout, "PC = 0x%x, Parsing or compiling failed\n", y->reg[yr_pc]);
-            break;
-        case ys_adp:
-            fprintf(stdout, "PC = 0x%x, Invalid instruction address detected staticly\n", y->reg[yr_pc]);
-            break;
-        case ys_inp:
-            fprintf(stdout, "PC = 0x%x, Invalid instruction detected staticly\n", y->reg[yr_pc]);
-            break;
-        default:
-            break;
-    }
-
-    const char *stat_names[4] = {
-        "AOK", "HLT", "ADR", "INS"
-    };
-    const char *cc_names[8] = {
-        "Z=0 S=0 O=0",
-        "Z=0 S=0 O=1",
-        "Z=0 S=1 O=0",
-        "Z=0 S=1 O=1",
-        "Z=1 S=0 O=0",
-        "Z=1 S=0 O=1",
-        "Z=1 S=1 O=0",
-        "Z=1 S=1 O=1"
-    };
-
-    fprintf(
-        stdout,
-        "Stopped in %d steps at PC = 0x%x.  Status '%s', CC %s\n",
-        y->reg[yr_sc], y->reg[yr_pc], stat_names[y->reg[yr_st]], cc_names[y->reg[yr_cc]]
-    );
-
-
-    const char *reg_names[yr_cnt] = {
-        "%eax", "%ecx", "%edx", "%ebx", "%esp", "%ebp", "%esi", "%edi"
-    };
-
-    fprintf(stdout, "Changes to registers:\n");
-    for (index = 0; index < yr_cnt; ++index) {
-        if (y->reg[index]) {
-            fprintf(stdout, "%s:\t0x%.8x\t0x%.8x\n", reg_names[index], 0, y->reg[index]);
-        }
-    }
-
-    fprintf(stdout, "\n");
-    fprintf(stdout, "Changes to memory:\n");
-    for (index = 0; index < Y_MEM_SIZE; ++index) {
-        if (y->mem[index]) {
-            fprintf(stdout, "0x%.4x:\t0x%.8x\t0x%.8x\n", index, 0, y->mem[index]);
-        }
-    }
-
+    y86_output(y);
 
     // Return
     result = y->reg[yr_st];
