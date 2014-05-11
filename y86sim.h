@@ -56,8 +56,8 @@ typedef enum {
     yr_ebp = 0x5,
     yr_esi = 0x6,
     yr_edi = 0x7,
-    #ifdef Y_RECORD_REG
     yr_cnt = 0x8, // Counting, not a register
+    #ifdef Y_RECORD_REG
     yr_rsv = 0x9, // Reserved, not a register
     yr_sx  = 0xA, // Non-standard: Step max
     yr_sc  = 0xB, // Non-standard: Step counter
@@ -65,19 +65,21 @@ typedef enum {
     yr_pc  = 0xD, // Non-standard: Y inst pointer
     yr_st  = 0xE, // Non-standard: Stat
     yr_nil = 0xF, // Null register holder, not a register
-    yr_cn2 = 0x10 // Another counting
+    #else
+    yr_st  = 0xE,
     #endif
+    yr_cn2 = 0x10 // Another counting
 } Y_reg;
 
 typedef struct {
     Y_char mem[Y_MEM_SIZE];
+    Y_char y_inst[Y_Y_INST_SIZE];
     Y_char x_inst[Y_X_INST_SIZE];
     Y_char *x_end;
     Y_char *(x_map[Y_Y_INST_SIZE]);
-    Y_addr ret;
-    #ifdef Y_RECORD_REG
+    // #ifdef Y_RECORD_REG
     Y_word reg[yr_cn2];
-    #endif
+    // #endif
 } Y_data;
 
 #endif

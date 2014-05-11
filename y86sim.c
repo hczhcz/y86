@@ -30,15 +30,15 @@ void y86_link_x_map(Y_data *y, Y_size pos) {
 }
 
 void y86_gen_save_esp(Y_data *y) {
-    y86_push_x(y, 0x89);
-    y86_push_x(y, 0x25);
-    y86_push_x_addr(y, &(y->ret));
+    //y86_push_x(y, 0x89);
+    //y86_push_x(y, 0x25);
+    //y86_push_x_addr(y, &(y->ret));
 }
 
 void y86_gen_load_esp(Y_data *y) {
-    y86_push_x(y, 0x8B);
-    y86_push_x(y, 0x25);
-    y86_push_x_addr(y, &(y->ret));
+    //y86_push_x(y, 0x8B);
+    //y86_push_x(y, 0x25);
+    //y86_push_x_addr(y, &(y->ret));
 }
 
 void y86_gen_init(Y_data *y) {
