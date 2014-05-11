@@ -8,7 +8,18 @@ void y86_push_x(Y_data *y, Y_char value) {
         *(y->x_end) = value;
         y->x_end++;
     } else {
-        // Error
+        fprintf(stderr, "Too large compiled instruction size (char: 0x%x)\n", value);
+        longjmp(y->jmp, ys_ccf);
+    }
+}
+
+void y86_push_x_word(Y_data *y, Y_word value) {
+    if (y->x_end + sizeof(Y_word) <= &(y->x_inst[Y_X_INST_SIZE])) {
+        *((Y_word *) y->x_end) = value;
+        y->x_end += sizeof(Y_word);
+    } else {
+        fprintf(stderr, "Too large compiled instruction size (word: 0x%x)\n", value);
+        longjmp(y->jmp, ys_ccf);
     }
 }
 
@@ -17,7 +28,8 @@ void y86_push_x_addr(Y_data *y, Y_addr value) {
         *((Y_addr *) y->x_end) = value;
         y->x_end += sizeof(Y_addr);
     } else {
-        // Error
+        fprintf(stderr, "Too large compiled instruction size (addr: 0x%x)\n", (Y_word) value);
+        longjmp(y->jmp, ys_ccf);
     }
 }
 
@@ -25,7 +37,8 @@ void y86_link_x_map(Y_data *y, Y_size pos) {
     if (pos < Y_Y_INST_SIZE) {
         y->x_map[pos] = y->x_end;
     } else {
-        // Error
+        fprintf(stderr, "Too large y86 instruction size\n");
+        longjmp(y->jmp, ys_ccf);
     }
 }
 
@@ -342,7 +355,7 @@ Y_word f_main(Y_char *fname, Y_word step) {
         case ys_clf:
             fprintf(stdout, "PC = 0x%x, File loading failed\n", /*y->reg[yr_pc]*/ 0);
             break;
-        case ys_clc:
+        case ys_ccf:
             fprintf(stdout, "PC = 0x%x, Parsing or compiling failed\n", y->reg[yr_pc]);
             break;
         case ys_adp:
@@ -379,8 +392,6 @@ Y_word f_main(Y_char *fname, Y_word step) {
     const char *reg_names[yr_cnt] = {
         "%eax", "%ecx", "%edx", "%ebx", "%esp", "%ebp", "%esi", "%edi"
     };
-
-    y->reg[1] = 2333;
 
     fprintf(stdout, "Changes to registers:\n");
     for (index = 0; index < yr_cnt; ++index) {

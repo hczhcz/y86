@@ -44,7 +44,7 @@ typedef enum {
     ys_adr = 0x3, // Address error
     ys_ins = 0x4, // Instruction error
     ys_clf = 0x5, // Non-standard: Loader error
-    ys_clc = 0x6, // Non-standard: Compiler, error
+    ys_ccf = 0x6, // Non-standard: Compiler, error
     ys_adp = 0x7, // Non-standard: ADR error caused by protected pc
     ys_inp = 0x8  // Non-standard: INS error caused by protected pc
 } Y_stat;
