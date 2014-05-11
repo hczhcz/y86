@@ -304,6 +304,12 @@ void y86_debug_exec(Y_data *y) {
     y->reg[yr_st] = ys_hlt;
 }
 
+void y86_ready(Y_data *y, Y_word step) {
+    y->reg[yr_sx] = step;
+    y->reg[yr_sc] = 0;
+    y->reg[yr_st] = ys_aok;
+}
+
 void y86_exec(Y_data *y) {
     ((Y_func) y->x_inst)();
 }
@@ -336,9 +342,7 @@ Y_word f_main(Y_char *fname, Y_word step) {
         y86_debug_exec(y);
         #endif
 
-        y->reg[yr_sx] = step;
-        y->reg[yr_sc] = 0;
-        y->reg[yr_st] = ys_aok;
+        y86_ready(y, step);
         y86_exec(y);
     } else {
         // Jumped out
