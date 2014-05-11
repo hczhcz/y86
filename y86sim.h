@@ -69,7 +69,7 @@ typedef enum {
 typedef struct {
     Y_char mem[Y_MEM_SIZE];
     Y_char x_inst[Y_X_INST_SIZE];
-    Y_word x_end;
+    Y_char *x_end;
     Y_addr ret;
     #ifdef Y_RECORD_REG
     Y_word reg[yr_cn2];

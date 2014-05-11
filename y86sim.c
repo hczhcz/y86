@@ -3,18 +3,18 @@
 #include <sys/mman.h>
 #include "y86sim.h"
 
-void y86_push_x(Y_data *y, Y_char data) {
-    if (y->x_end < Y_X_INST_SIZE) {
-        y->x_inst[y->x_end] = data;
+void y86_push_x(Y_data *y, Y_char value) {
+    if (y->x_end < &(y->x_inst[Y_X_INST_SIZE])) {
+        *(y->x_end) = value;
         y->x_end++;
     } else {
         // Error
     }
 }
 
-void y86_push_x_addr(Y_data *y, Y_addr data) {
-    if (y->x_end + sizeof(Y_addr) <= Y_X_INST_SIZE) {
-        *((Y_addr *) &(y->x_inst[y->x_end])) = data;
+void y86_push_x_addr(Y_data *y, Y_addr value) {
+    if (y->x_end + sizeof(Y_addr) <= &(y->x_inst[Y_X_INST_SIZE])) {
+        *((Y_addr *) y->x_end) = value;
         y->x_end += sizeof(Y_addr);
     } else {
         // Error
@@ -226,7 +226,10 @@ Y_data *y86_new() {
         MAP_PRIVATE | MAP_ANONYMOUS,
         -1, 0
     );
+
+    y->x_end = &(y->x_inst[0]);
     y86_gen_init(y);
+
     return y;
 }
 
