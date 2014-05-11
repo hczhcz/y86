@@ -21,6 +21,14 @@ void y86_push_x_addr(Y_data *y, Y_addr value) {
     }
 }
 
+void y86_link_x_map(Y data *y, Y_word pos) {
+    if (pos < Y_Y_INST_SIZE) {
+        y->x_map[pos] = y->x_end;
+    } else {
+        // Error
+    }
+}
+
 void y86_gen_save_esp(Y_data *y) {
     y86_push_x(y, 0x89);
     y86_push_x(y, 0x25);
@@ -56,7 +64,7 @@ void y86_gen_ret(Y_data *y) {
     y86_push_x(y, 0xC3);
 }
 
-void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val, Y_word pos) {
+void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
     switch (op) {
         case yi_halt:
             y86_gen_ret(y);
@@ -147,6 +155,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val, Y_word pos)
 
 void y86_parse(Y_data *y, Y_char *begin, Y_char *inst, Y_char *end) {
     while (inst != end) {
+        y86_link_x_map(y, inst - begin);
+
         Y_inst op = *inst;
         inst++;
 
@@ -215,7 +225,7 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char *inst, Y_char *end) {
                 break;
         }
 
-        y86_gen_x(y, op, ra, rb, val, inst - begin);
+        y86_gen_x(y, op, ra, rb, val);
     }
 }
 
