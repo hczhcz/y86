@@ -42,46 +42,64 @@ void y86_link_x_map(Y_data *y, Y_size pos) {
     }
 }
 
-void y86_gen_save_esp(Y_data *y) {
-    //y86_push_x(y, 0x89);
-    //y86_push_x(y, 0x25);
-    //y86_push_x_addr(y, &(y->ret));
-}
+void y86_step() {
+    __asm__ (
+        "push %eax\n"
+        "pushf\n"
 
-void y86_gen_load_esp(Y_data *y) {
-    //y86_push_x(y, 0x8B);
-    //y86_push_x(y, 0x25);
-    //y86_push_x_addr(y, &(y->ret));
+        "movd %mm3, %eax\n"
+        "decl %eax\n"
+        "testl %eax, %eax\n"
+        "jz y_fin\n"
+
+        "popf\n"
+        "pop %eax\n"
+        "ret\n"
+
+        "y_fin:\n"
+        "popf\n"
+        "pop %eax\n"
+        "add 8, %esp\n"
+        "ret\n"
+    );
 }
 
 void y86_gen_init(Y_data *y) {
-    y86_gen_save_esp(y);
+    y86_push_x(y, 0x68);
+    y86_push_x_addr(y, y86_step); // TODO!!
+
+    y86_push_x(y, 0x0F);
+    y86_push_x(y, 0x6E);
+    y86_push_x(y, 0xC4);
+
+    y86_push_x(y, 0x0F);
+    y86_push_x(y, 0x6E);
+    y86_push_x(y, 0x15);
+    y86_push_x_addr(y, &(y->reg[yr_sc]));
 }
 
-/*void y86_gen_call(Y_data *y, Y_addr target) {
-    y86_gen_load_esp(y);
-    //target-&(y->x_inst[y->x_end])-sizeof(y_addr)
-    y86_gen_save_esp(y);
-}*/
-
 void y86_gen_ret(Y_data *y) {
-    y86_gen_load_esp(y);
+    // y86_gen_load_esp(y);
     y86_push_x(y, 0xC3);
 }
 
-void y86_gen_reg_update(Y_data *y, Y_reg r) {}
+void y86_gen_step(Y_data *y) {
+    y86_push_x(y, 0x0F);
+    y86_push_x(y, 0x6E);
+    y86_push_x(y, 0xCC);
 
-void y86_gen_step(Y_data *y) {}
+    y86_push_x(y, 0x0F);
+    y86_push_x(y, 0x7E);
+    y86_push_x(y, 0xC4);
 
-void y86_gen_zf(Y_data *y) {}
+    y86_push_x(y, 0xFF);
+    y86_push_x(y, 0x14);
+    y86_push_x(y, 0x24);
 
-void y86_gen_sf(Y_data *y) {}
-
-void y86_gen_of(Y_data *y) {}
-
-void y86_gen_pos(Y_data *y) {}
-
-void y86_gen_stat(Y_data *y) {}
+    y86_push_x(y, 0x0F);
+    y86_push_x(y, 0x7E);
+    y86_push_x(y, 0xCC);
+}
 
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
     switch (op) {
@@ -172,6 +190,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
         default:
             break;
     }
+    y86_gen_step(y);
 }
 
 void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
@@ -254,7 +273,9 @@ void y86_load(Y_data *y) {
     Y_char *inst = begin;
     Y_char *end = begin + y->reg[yr_len];
 
+    y86_gen_init(y);
     while (inst != end) y86_parse(y, begin, &inst, end);
+    y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0);
 
     y->reg[yr_pc] = 0;
 }
@@ -329,7 +350,7 @@ void y86_output_state(Y_data *y) {
     fprintf(
         stdout,
         "Stopped in %d steps at PC = 0x%x.  Status '%s', CC %s\n",
-        y->reg[yr_sc], y->reg[yr_pc], stat_names[y->reg[yr_st]], cc_names[y->reg[yr_cc]]
+        y->reg[yr_sx] - y->reg[yr_sc], y->reg[yr_pc], stat_names[y->reg[yr_st]], cc_names[y->reg[yr_cc]]
     );
 }
 
@@ -368,7 +389,6 @@ Y_data *y86_new() {
     );
 
     y->x_end = &(y->x_inst[0]);
-    y86_gen_init(y);
 
     return y;
 }
@@ -380,7 +400,7 @@ void y86_debug_exec(Y_data *y) {
 
 void y86_ready(Y_data *y, Y_word step) {
     y->reg[yr_sx] = step;
-    y->reg[yr_sc] = 0;
+    y->reg[yr_sc] = step;
     y->reg[yr_st] = ys_aok;
 }
 
