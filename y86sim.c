@@ -42,69 +42,32 @@ void y86_link_x_map(Y_data *y, Y_size pos) {
     }
 }
 
-void y86_step() {
-    __asm__ (
-        "push %eax\n"
-        "pushf\n"
-
-        "movd %mm3, %eax\n"
-        "decl %eax\n"
-        "testl %eax, %eax\n"
-        "jz y_fin\n"
-
-        "popf\n"
-        "pop %eax\n"
-        "ret\n"
-
-        "y_fin:\n"
-        "popf\n"
-        "pop %eax\n"
-        "add 8, %esp\n"
-        "ret\n"
-    );
-}
-
-void y86_gen_init(Y_data *y) {
-    y86_push_x(y, 0x68);
-    y86_push_x_addr(y, y86_step); // TODO!!
-
-    y86_push_x(y, 0x0F);
-    y86_push_x(y, 0x6E);
-    y86_push_x(y, 0xC4);
-
-    y86_push_x(y, 0x0F);
-    y86_push_x(y, 0x6E);
-    y86_push_x(y, 0x15);
-    y86_push_x_addr(y, &(y->reg[yr_sc]));
-}
-
-void y86_gen_ret(Y_data *y) {
-    // y86_gen_load_esp(y);
-    y86_push_x(y, 0xC3);
-}
-
-void y86_gen_step(Y_data *y) {
+void y86_gen_before(Y_data *y) {
     y86_push_x(y, 0x0F);
     y86_push_x(y, 0x6E);
     y86_push_x(y, 0xCC);
 
     y86_push_x(y, 0x0F);
     y86_push_x(y, 0x7E);
-    y86_push_x(y, 0xC4);
+    y86_push_x(y, 0xD4);
 
     y86_push_x(y, 0xFF);
     y86_push_x(y, 0x14);
     y86_push_x(y, 0x24);
+}
 
+void y86_gen_after(Y_data *y) {
     y86_push_x(y, 0x0F);
     y86_push_x(y, 0x7E);
     y86_push_x(y, 0xCC);
 }
 
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
+    y86_gen_before(y);
+
     switch (op) {
         case yi_halt:
-            y86_gen_ret(y);
+            //
             break;
         case yi_nop:
             //
@@ -190,7 +153,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
         default:
             break;
     }
-    y86_gen_step(y);
+
+    y86_gen_after(y);
 }
 
 void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
@@ -273,7 +237,6 @@ void y86_load(Y_data *y) {
     Y_char *inst = begin;
     Y_char *end = begin + y->reg[yr_len];
 
-    y86_gen_init(y);
     while (inst != end) y86_parse(y, begin, &inst, end);
     y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0);
 
@@ -404,8 +367,81 @@ void y86_ready(Y_data *y, Y_word step) {
     y->reg[yr_st] = ys_aok;
 }
 
-void y86_exec(Y_data *y) {
-    ((Y_func) y->x_inst)();
+void __attribute__ ((noinline)) y86_exec(Y_data *y) {
+    Y_addr rt = &(y->reg[0]);
+
+    __asm__ __volatile__ (
+        "movd %%esp, %%mm0" "\n\t"
+        "movl %0, %%esp" "\n\t"
+
+        "popl %%eax" "\n\t"
+        "popl %%ecx" "\n\t"
+        "popl %%edx" "\n\t"
+        "popl %%ebx" "\n\t"
+        "popl %%ebp" "\n\t" "movd %%ebp, %%mm1" "\n\t"
+        "popl %%ebp" "\n\t"
+        "popl %%esi" "\n\t"
+        "popl %%edi" "\n\t"
+
+        "movd 12(%%esp), %%mm3" "\n\t"
+        "movd 16(%%esp), %%mm4" "\n\t"
+        "movd 20(%%esp), %%mm5" "\n\t"
+        "movd 24(%%esp), %%mm6" "\n\t"
+        "movd 28(%%esp), %%mm7" "\n\t"
+
+        "addl $12, %%esp" "\n\t"
+        "pushl y86_inner" "\n\t"
+        "movd %%esp, %%mm2" "\n\t"
+        "pushl %%esp" "\n\t"
+        "addl $24, (%%esp)" "\n\t"
+        "subl $4, %%esp" "\n\t"
+
+        "y86_call:" "\n\t"
+
+        "popfd" "\n\t"
+        "ret" "\n\t"
+
+        "y86_inner:" "\n\t"
+
+        "pushfd" "\n\t"
+        "movd %%eax, %%mm3" "\n\t"
+
+        "movd %%mm6, %%eax" "\n\t"
+        "decl %%eax" "\n\t"
+        "movd %%eax, %%mm6" "\n\t"
+        "testl %%eax, %%eax" "\n\t"
+        "movd %%mm3, %%eax" "\n\t"
+
+        "jnz y86_call" "\n\t"
+
+        "movd %%mm3, 12(%%esp)" "\n\t"
+        "movd %%mm4, 16(%%esp)" "\n\t"
+        "movd %%mm5, 20(%%esp)" "\n\t"
+        "movd %%mm6, 24(%%esp)" "\n\t"
+        "movd %%mm7, 28(%%esp)" "\n\t"
+
+        "pushl %%edi" "\n\t"
+        "pushl %%esi" "\n\t"
+        "pushl %%ebp" "\n\t"
+        "movd %%mm1, %%ebp" "\n\t" "pushl %%ebp" "\n\t"
+        "pushl %%ebx" "\n\t"
+        "pushl %%edx" "\n\t"
+        "pushl %%ecx" "\n\t"
+        "pushl %%eax" "\n\t"
+
+        "movd %%mm0, %%esp"// "\n\t"
+        : "=r" (rt)
+    );
+
+    #define Y_CM(x) __asm__ ("movd %0, %%mm" #x "\n" : "=r" (y->reg[x + yr_cnt]));
+    // Y_CM(0) Y_CM(1) Y_CM(2) Y_CM(3) Y_CM(4) Y_CM(5) Y_CM(6) Y_CM(7)
+    // Y_CM(8) Y_CM(9) Y_CM(10) Y_CM(11) Y_CM(12) Y_CM(13) Y_CM(14) Y_CM(15)
+    #undef Y_CM
+
+    #define Y_RM(x) __asm__ ("movd %%mm" #x ", %0\n" : "=r" (y->reg[x + yr_cnt]));
+    // Y_RM(0) Y_RM(1) Y_RM(2) Y_RM(3) Y_RM(4) Y_RM(5) Y_RM(6) Y_RM(7)
+    // Y_RM(8) Y_RM(9) Y_RM(10) Y_RM(11) Y_RM(12) Y_RM(13) Y_RM(14) Y_RM(15)
+    #undef Y_RM
 }
 
 void y86_output(Y_data *y) {

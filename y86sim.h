@@ -57,26 +57,32 @@ typedef enum {
     yr_ebp = 0x5,
     yr_esi = 0x6,
     yr_edi = 0x7,
-    yr_xsp = 0x8, // Non-standard: Extra X ESP
-    yr_ysp = 0x9, // Non-standard: Extra Y ESP
-    yr_sx  = 0xA, // Non-standard: Step max
-    yr_sc  = 0xB, // Non-standard: Step counter (decrease)
-    yr_len = 0xC, // Non-standard: Y inst size
-    yr_pc  = 0xD, // Non-standard: Y inst pointer
-    yr_st  = 0xE, // Non-standard: Stat
-    yr_cc  = 0xF  // Non-standard: ZF SF OF
+    yr_cc  = 0x8, // Non-standard: Flags, ZF SF OF
+    yr_rey = 0x9, // Non-standard: Y return address
+    yr_rex = 0xA, // Non-standard: X return address
+    yr_len = 0xB, // Non-standard: Y inst size
+    yr_pc  = 0xC, // Non-standard: Y inst pointer
+    yr_sx  = 0xD, // Non-standard: Step max
+    yr_sc  = 0xE, // Non-standard: Step counter (decrease)
+    yr_st  = 0xF  // Non-standard: Stat
 } Y_reg;
+
+// MM0: X ESP
+// MM1: Y ESP
+// MM2: Mid ESP
+// MM3: Temp
 
 const Y_char yr_cnt = 0x08; // Counting, not a register
 const Y_char yr_cn2 = 0x10; // Another counting
+const Y_char yr_nil = 0x0f; // Null
 
 typedef struct {
-    Y_char mem[Y_MEM_SIZE];
     Y_char y_inst[Y_Y_INST_SIZE];
+    Y_char mem[Y_MEM_SIZE];
+    Y_word reg[yr_cn2];
     Y_char x_inst[Y_X_INST_SIZE];
     Y_char *x_end;
     Y_char *(x_map[Y_Y_INST_SIZE]);
-    Y_word reg[yr_cn2];
     jmp_buf jmp;
 } Y_data;
 
