@@ -14,6 +14,8 @@ void y86_push_x(Y_data *y, Y_char value) {
     }
 }
 
+#define YX(data) {y86_push_x(y, data);}
+
 void y86_push_x_word(Y_data *y, Y_word value) {
     if (y->x_end + sizeof(Y_word) <= &(y->x_inst[Y_X_INST_SIZE])) {
         *((Y_word *) y->x_end) = value;
@@ -44,23 +46,13 @@ void y86_link_x_map(Y_data *y, Y_size pos) {
 }
 
 void y86_gen_before(Y_data *y) {
-    y86_push_x(y, 0x0F);
-    y86_push_x(y, 0x7E);
-    y86_push_x(y, 0xCC);
+    YX(0x0F) YX(0x7E) YX(0xCC) // movd %mm1, %esp
 }
 
 void y86_gen_after(Y_data *y) {
-    y86_push_x(y, 0x0F);
-    y86_push_x(y, 0x6E);
-    y86_push_x(y, 0xCC);
-
-    y86_push_x(y, 0x0F);
-    y86_push_x(y, 0x7E);
-    y86_push_x(y, 0xD4);
-
-    y86_push_x(y, 0xFF);
-    y86_push_x(y, 0x14);
-    y86_push_x(y, 0x24);
+    YX(0x0F) YX(0x6E) YX(0xCC) // movd %esp, %mm1
+    YX(0x0F) YX(0x7E) YX(0xD4) // movd %mm2, %esp
+    YX(0xFF) YX(0x14) YX(0x24) // call (%esp)
 }
 
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
