@@ -4,6 +4,15 @@
 #include <string.h>
 #include <sys/mman.h>
 
+Y_data *y86_new() {
+    return mmap(
+        0, sizeof(Y_data),
+        PROT_READ | PROT_WRITE | PROT_EXEC,
+        MAP_PRIVATE | MAP_ANONYMOUS,
+        -1, 0
+    );
+}
+
 const Y_word y_static_num[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 
 #define YX(data) {y86_push_x(y, data);}
@@ -43,14 +52,11 @@ void y86_push_x_addr(Y_data *y, Y_addr value) {
 void y86_link_x_map(Y_data *y, Y_size pos) {
     if (pos < Y_Y_INST_SIZE) {
         y->x_map[pos] = y->x_end;
+        fprintf(stderr, "%x---%x\n", pos, y->x_end);
     } else {
         fprintf(stderr, "Too large y86 instruction size\n");
         longjmp(y->jmp, ys_ccf);
     }
-}
-
-void y86_gen_init(Y_data *y) {
-    y->x_end = &(y->x_inst[0]);
 }
 
 void y86_gen_before(Y_data *y) {
@@ -69,6 +75,12 @@ void y86_gen_stat(Y_data *y, Y_stat stat) {
 
 Y_char y86_x_regbyte(Y_reg ra, Y_reg rb) {
     return 0xC0 | (ra >> 3) | rb;
+}
+
+void y86_gen_protect(Y_data *y) {
+    y86_gen_before(y);
+    y86_gen_stat(y, ys_inp);
+    y86_gen_after(y);
 }
 
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
@@ -172,7 +184,6 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
 }
 
 void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
-    y86_link_x_map(y, *inst - begin);
     y->reg[yr_pc] = *inst - begin;
 
     Y_inst op = **inst;
@@ -244,6 +255,9 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
     }
 
     y86_gen_x(y, op, ra, rb, val);
+
+    // Link tail position
+    y86_link_x_map(y, y->reg[yr_pc]);
 }
 
 void y86_load(Y_data *y) {
@@ -251,8 +265,9 @@ void y86_load(Y_data *y) {
     Y_char *inst = begin;
     Y_char *end = begin + y->reg[yr_len];
 
+    y->x_end = &(y->x_inst[0]);
     while (inst != end) y86_parse(y, begin, &inst, end);
-    y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0);
+    y86_gen_protect(y);
 
     y->reg[yr_pc] = 0;
 }
@@ -280,6 +295,104 @@ void y86_load_file(Y_data *y, Y_char *fname) {
     } else {
         fprintf(stderr, "Can't open binary file '%s'\n", fname);
         longjmp(y->jmp, ys_clf);
+    }
+}
+
+void y86_debug_exec(Y_data *y) {
+    y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0);
+    y->reg[yr_st] = ys_hlt;
+}
+
+void y86_ready(Y_data *y, Y_word step) {
+    y->reg[yr_cc] = 0x40;
+    y->reg[yr_rey] = (Y_word) y->x_map[y->reg[yr_pc]];
+    y->reg[yr_sx] = step;
+    y->reg[yr_sc] = step;
+    y->reg[yr_st] = ys_aok;
+}
+
+void __attribute__ ((noinline)) y86_exec(Y_data *y) {
+    __asm__ __volatile__ (
+        "pushal" "\n\t"
+        "pushfd" "\n\t"
+
+        "movd %%esp, %%mm0" "\n\t"
+        "movl %0, %%esp" "\n\t"
+
+        // Load data
+        "movd 12(%%esp), %%mm1" "\n\t"
+        "popal" "\n\t"
+
+        "movd 16(%%esp), %%mm4" "\n\t"
+        "movd 20(%%esp), %%mm5" "\n\t"
+        "movd 24(%%esp), %%mm6" "\n\t"
+        "movd 28(%%esp), %%mm7" "\n\t"
+
+        // Build callback stack
+        "addl $12, %%esp" "\n\t"
+        "pushl $y86_call" "\n\t"
+        "movd %%esp, %%mm2" "\n\t"
+
+        "subl $8, %%esp" "\n\t"
+        "popfd" "\n\t"
+
+        // Call
+        "y86_call:" "\n\t"
+
+        "pushfd" "\n\t"
+        "movd %%eax, %%mm3" "\n\t"
+
+        // Check step
+        "movd %%mm6, %%eax" "\n\t"
+        "decl %%eax" "\n\t"
+        "movd %%eax, %%mm6" "\n\t"
+        "testl %%eax, %%eax" "\n\t"
+        "jz y86_fin" "\n\t"
+
+        // Check state
+        "movd %%mm7, %%eax" "\n\t"
+        "testl %%eax, %%eax" "\n\t"
+        "jnz y86_fin" "\n\t"
+
+        "movd %%mm3, %%eax" "\n\t"
+        "popfd" "\n\t"
+
+        "ret" "\n\t"
+
+        // Finished
+        "y86_fin:" "\n\t"
+
+        "movd %%mm3, %%eax" "\n\t"
+
+        // Restore data
+        "movd %%mm4, 16(%%esp)" "\n\t"
+        "movd %%mm5, 20(%%esp)" "\n\t"
+        "movd %%mm6, 24(%%esp)" "\n\t"
+        "movd %%mm7, 28(%%esp)" "\n\t"
+
+        "pushal" "\n\t"
+        "movd %%mm1, 12(%%esp)" "\n\t"
+
+        "movd %%mm0, %%esp" "\n\t"
+
+        "popfd" "\n\t"
+        "popal"// "\n\t"
+        :
+        : "r" (&y->reg[0])
+    );
+}
+
+void y86_trace_pc(Y_data *y) {
+    Y_size index;
+    for (index = 0; index < Y_Y_INST_SIZE; ++index) {
+        if (y->reg[yr_rey] == (Y_word) y->x_map[index]) {
+            y->reg[yr_pc] = index;
+            break;
+        }
+    }
+    if (index == Y_Y_INST_SIZE) {
+        fprintf(stderr, "Unknown instruction pointer at 0x%x (PC = 0x%x, X[PC] = 0x%x)\n", y->reg[yr_rey], y->reg[yr_pc], (Y_word) y->x_map[y->reg[yr_pc]]);
+        longjmp(y->jmp, ys_inp);
     }
 }
 
@@ -361,113 +474,6 @@ void y86_output_mem(Y_data *y) {
     }
 }
 
-Y_data *y86_new() {
-    return mmap(
-        0, sizeof(Y_data),
-        PROT_READ | PROT_WRITE | PROT_EXEC,
-        MAP_PRIVATE | MAP_ANONYMOUS,
-        -1, 0
-    );
-}
-
-void y86_debug_exec(Y_data *y) {
-    y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0);
-    y->reg[yr_st] = ys_hlt;
-}
-
-void y86_ready(Y_data *y, Y_word step) {
-    y->reg[yr_cc] = 0x40;
-    y->reg[yr_rey] = (Y_word) y->x_map[y->reg[yr_pc]];
-    y->reg[yr_sx] = step;
-    y->reg[yr_sc] = step;
-    y->reg[yr_st] = ys_aok;
-}
-
-void y86_trace_pc(Y_data *y) {
-    Y_size index;
-    for (index = 0; index < Y_Y_INST_SIZE; ++index) {
-        if (y->reg[yr_rey] == (Y_word) y->x_map[index]) {
-            y->reg[yr_pc] = index;
-            break;
-        }
-    }
-    if (index == Y_Y_INST_SIZE) {
-        fprintf(stderr, "IP = 0x%x, Broken instruction pointer\n", y->reg[yr_rey]);
-        longjmp(y->jmp, ys_inp);
-    }
-}
-
-void __attribute__ ((noinline)) y86_exec(Y_data *y) {
-    __asm__ __volatile__ (
-        "pushal" "\n\t"
-        "pushfd" "\n\t"
-
-        "movd %%esp, %%mm0" "\n\t"
-        "movl %0, %%esp" "\n\t"
-
-        // Load data
-        "movd 12(%%esp), %%mm1" "\n\t"
-        "popal" "\n\t"
-
-        "movd 16(%%esp), %%mm4" "\n\t"
-        "movd 20(%%esp), %%mm5" "\n\t"
-        "movd 24(%%esp), %%mm6" "\n\t"
-        "movd 28(%%esp), %%mm7" "\n\t"
-
-        // Build callback stack
-        "addl $12, %%esp" "\n\t"
-        "pushl $y86_call" "\n\t"
-        "movd %%esp, %%mm2" "\n\t"
-
-        "subl $8, %%esp" "\n\t"
-        "popfd" "\n\t"
-
-        // Call
-        "y86_call:" "\n\t"
-
-        "pushfd" "\n\t"
-        "movd %%eax, %%mm3" "\n\t"
-
-        // Check state
-        "movd %%mm7, %%eax" "\n\t"
-        "testl %%eax, %%eax" "\n\t"
-        "jnz y86_fin" "\n\t"
-
-        // Check step
-        "movd %%mm6, %%eax" "\n\t"
-        "decl %%eax" "\n\t"
-        "movd %%eax, %%mm6" "\n\t"
-        "testl %%eax, %%eax" "\n\t"
-        "jz y86_fin" "\n\t"
-
-        "movd %%mm3, %%eax" "\n\t"
-        "popfd" "\n\t"
-
-        "ret" "\n\t"
-
-        // Finished
-        "y86_fin:" "\n\t"
-
-        "movd %%mm3, %%eax" "\n\t"
-
-        // Restore data
-        "movd %%mm4, 16(%%esp)" "\n\t"
-        "movd %%mm5, 20(%%esp)" "\n\t"
-        "movd %%mm6, 24(%%esp)" "\n\t"
-        "movd %%mm7, 28(%%esp)" "\n\t"
-
-        "pushal" "\n\t"
-        "movd %%mm1, 12(%%esp)" "\n\t"
-
-        "movd %%mm0, %%esp" "\n\t"
-
-        "popfd" "\n\t"
-        "popal"// "\n\t"
-        :
-        : "r" (&y->reg[0])
-    );
-}
-
 void y86_output(Y_data *y) {
     y86_output_error(y);
     y86_output_state(y);
@@ -486,7 +492,6 @@ void f_usage(Y_char *pname) {
 
 Y_stat f_main(Y_char *fname, Y_word step) {
     Y_data *y = y86_new();
-    y86_gen_init(y);
     Y_stat result;
     y->reg[yr_st] = setjmp(y->jmp);
 
@@ -504,6 +509,7 @@ Y_stat f_main(Y_char *fname, Y_word step) {
 
         y86_ready(y, step);
         y86_exec(y);
+        y86_trace_pc(y);
     } else {
         // Jumped out
     }

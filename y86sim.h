@@ -43,8 +43,8 @@ typedef enum {
     ys_ins = 0x3, // Instruction error
     ys_clf = 0x4, // Non-standard: Loader error
     ys_ccf = 0x5, // Non-standard: Compiler, error
-    ys_adp = 0x6, // Non-standard: ADR error caused by protected pc
-    ys_inp = 0x7  // Non-standard: INS error caused by protected pc
+    ys_adp = 0x6, // Non-standard: ADR error caused by mem protection
+    ys_inp = 0x7  // Non-standard: INS error caused by mem protection
 } Y_stat;
 
 typedef enum {
