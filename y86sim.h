@@ -71,9 +71,9 @@ typedef enum {
 // MM2: Mid ESP
 // MM3: Temp
 
-const Y_char yr_cnt = 0x08; // Counting, not a register
-const Y_char yr_cn2 = 0x10; // Another counting
-const Y_char yr_nil = 0x0f; // Null
+const Y_word yr_cnt = 0x08; // Counting, not a register
+const Y_word yr_cn2 = 0x10; // Another counting
+const Y_word yr_nil = 0x0f; // Null
 
 typedef struct {
     Y_char y_inst[Y_Y_INST_SIZE];

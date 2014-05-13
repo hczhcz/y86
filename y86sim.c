@@ -4,6 +4,12 @@
 #include <string.h>
 #include <sys/mman.h>
 
+const Y_word y_static_num[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+
+#define YX(data) {y86_push_x(y, data);}
+#define YXW(data) {y86_push_x_word(y, data);}
+#define YXA(data) {y86_push_x_addr(y, data);}
+
 void y86_push_x(Y_data *y, Y_char value) {
     if (y->x_end < &(y->x_inst[Y_X_INST_SIZE])) {
         *(y->x_end) = value;
@@ -13,8 +19,6 @@ void y86_push_x(Y_data *y, Y_char value) {
         longjmp(y->jmp, ys_ccf);
     }
 }
-
-#define YX(data) {y86_push_x(y, data);}
 
 void y86_push_x_word(Y_data *y, Y_word value) {
     if (y->x_end + sizeof(Y_word) <= &(y->x_inst[Y_X_INST_SIZE])) {
@@ -45,6 +49,10 @@ void y86_link_x_map(Y_data *y, Y_size pos) {
     }
 }
 
+void y86_gen_init(Y_data *y) {
+    y->x_end = &(y->x_inst[0]);
+}
+
 void y86_gen_before(Y_data *y) {
     YX(0x0F) YX(0x7E) YX(0xCC) // movd %mm1, %esp
 }
@@ -60,7 +68,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
 
     switch (op) {
         case yi_halt:
-            //
+            YX(0x0F) YX(0xFE) YX(0x3D) YXA(&(y_static_num[ys_hlt]))
+            //YX(0x0F) YX(0x6F) YX(0xFE)
             break;
         case yi_nop:
             //
@@ -310,7 +319,7 @@ void y86_output_state(Y_data *y) {
     fprintf(
         stdout,
         "Stopped in %d steps at PC = 0x%x.  Status '%s', CC %s\n",
-        y->reg[yr_sx] - y->reg[yr_sc], y->reg[yr_pc], stat_names[y->reg[yr_st]], cc_names[y86_cc_transform(y->reg[yr_cc])]
+        y->reg[yr_sx] - y->reg[yr_sc], y->reg[yr_pc], stat_names[7 & y->reg[yr_st]], cc_names[y86_cc_transform(y->reg[yr_cc])]
     );
 }
 
@@ -340,15 +349,13 @@ void y86_output_mem(Y_data *y) {
     }
 }
 
-void y86_new(Y_data *y) {
-    mmap(
+Y_data *y86_new() {
+    return mmap(
         0, sizeof(Y_data),
         PROT_READ | PROT_WRITE | PROT_EXEC,
-        MAP_ANONYMOUS,
+        MAP_PRIVATE | MAP_ANONYMOUS,
         -1, 0
     );
-
-    y->x_end = &(y->x_inst[0]);
 }
 
 void y86_debug_exec(Y_data *y) {
@@ -368,6 +375,8 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
     __asm__ __volatile__ (
         "pushal" "\n\t"
         "pushfd" "\n\t"
+
+        //"emms" "\n\t"
 
         "movd %%esp, %%mm0" "\n\t"
         "movl %0, %%esp" "\n\t"
@@ -400,7 +409,7 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         // Check state
         "movd %%mm7, %%eax" "\n\t"
         "testl %%eax, %%eax" "\n\t"
-        "jz y86_fin" "\n\t"
+        "jnz y86_fin" "\n\t"
 
         // Check step
         "movd %%mm6, %%eax" "\n\t"
@@ -413,6 +422,8 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         "movd %%mm3, %%eax" "\n\t"
 
         "ret" "\n\t"
+        //"wr:ret" "\n\t"
+        //"jmpl *(%%esp)" "\n\t"
 
         // Finished
         "y86_fin:" "\n\t"
@@ -454,9 +465,8 @@ void f_usage(Y_char *pname) {
 }
 
 Y_word f_main(Y_char *fname, Y_word step) {
-    Y_data mem_y;
-    Y_data *y = &mem_y;
-    y86_new(y);
+    Y_data *y = y86_new();
+    y86_gen_init(y);
     Y_word result;
     y->reg[yr_st] = setjmp(y->jmp);
 
