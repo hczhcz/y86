@@ -84,9 +84,9 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
         case yi_rrmovl:
             // ra, rb >= 0
             if (ra < yr_cnt && rb < yr_cnt) {
-                //
+                YX(0x89) YX(y86_x_regbyte(ra, rb))
             } else {
-                //
+                y86_gen_stat(y, ys_ins);
             }
             break;
         case yi_cmovle:
@@ -376,10 +376,25 @@ void y86_debug_exec(Y_data *y) {
 }
 
 void y86_ready(Y_data *y, Y_word step) {
-    y->reg[yr_cc] = 0;
+    y->reg[yr_cc] = 0x40;
+    y->reg[yr_rey] = (Y_word) y->x_map[y->reg[yr_pc]];
     y->reg[yr_sx] = step;
     y->reg[yr_sc] = step;
     y->reg[yr_st] = ys_aok;
+}
+
+void y86_trace_pc(Y_data *y) {
+    Y_size index;
+    for (index = 0; index < Y_Y_INST_SIZE; ++index) {
+        if (y->reg[yr_rey] == (Y_word) y->x_map[index]) {
+            y->reg[yr_pc] = index;
+            break;
+        }
+    }
+    if (index == Y_Y_INST_SIZE) {
+        fprintf(stderr, "IP = 0x%x, Broken instruction pointer\n", y->reg[yr_rey]);
+        longjmp(y->jmp, ys_inp);
+    }
 }
 
 void __attribute__ ((noinline)) y86_exec(Y_data *y) {
@@ -403,17 +418,15 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         "addl $12, %%esp" "\n\t"
         "pushl $y86_call" "\n\t"
         "movd %%esp, %%mm2" "\n\t"
-        "pushl %%esp" "\n\t"
-        "addl $24, (%%esp)" "\n\t"
 
-        "subl $4, %%esp" "\n\t"
+        "subl $8, %%esp" "\n\t"
         "popfd" "\n\t"
 
         // Call
         "y86_call:" "\n\t"
 
-        "movd %%eax, %%mm3" "\n\t"
         "pushfd" "\n\t"
+        "movd %%eax, %%mm3" "\n\t"
 
         // Check state
         "movd %%mm7, %%eax" "\n\t"
@@ -427,8 +440,8 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         "testl %%eax, %%eax" "\n\t"
         "jz y86_fin" "\n\t"
 
-        "popfd" "\n\t"
         "movd %%mm3, %%eax" "\n\t"
+        "popfd" "\n\t"
 
         "ret" "\n\t"
 
