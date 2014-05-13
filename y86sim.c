@@ -295,9 +295,13 @@ void y86_output_error(Y_data *y) {
     }
 }
 
+Y_word y86_cc_transform(Y_word cc_x) {
+    return ((cc_x >> 11) & 1) | ((cc_x >> 6) & 2) | ((cc_x >> 4) & 4);
+}
+
 void y86_output_state(Y_data *y) {
-    const char *stat_names[4] = {
-        "AOK", "HLT", "ADR", "INS"
+    const char *stat_names[8] = {
+        "AOK", "HLT", "ADR", "INS", "", "", "ADR", "INS"
     };
 
     const char *cc_names[8] = {
@@ -314,19 +318,19 @@ void y86_output_state(Y_data *y) {
     fprintf(
         stdout,
         "Stopped in %d steps at PC = 0x%x.  Status '%s', CC %s\n",
-        y->reg[yr_sx] - y->reg[yr_sc], y->reg[yr_pc], stat_names[y->reg[yr_st]], cc_names[y->reg[yr_cc]]
+        y->reg[yr_sx] - y->reg[yr_sc], y->reg[yr_pc], stat_names[y->reg[yr_st]], cc_names[y86_cc_transform(y->reg[yr_cc])]
     );
 }
 
 void y86_output_reg(Y_data *y) {
-    Y_size index;
+    Y_word index;
 
     const char *reg_names[yr_cnt] = {
-        "%eax", "%ecx", "%edx", "%ebx", "%esp", "%ebp", "%esi", "%edi"
+        "%edi", "%esi", "%ebp", "%esp", "%ebx", "%edx", "%ecx", "%eax"
     };
 
     fprintf(stdout, "Changes to registers:\n");
-    for (index = 0; index < yr_cnt; ++index) {
+    for (index = yr_cnt - 1; index >= 0; --index) {
         if (y->reg[index]) {
             fprintf(stdout, "%s:\t0x%.8x\t0x%.8x\n", reg_names[index], 0, y->reg[index]);
         }
