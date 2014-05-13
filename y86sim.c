@@ -52,7 +52,7 @@ void y86_push_x_addr(Y_data *y, Y_addr value) {
 void y86_link_x_map(Y_data *y, Y_size pos) {
     if (pos < Y_Y_INST_SIZE) {
         y->x_map[pos] = y->x_end;
-        fprintf(stderr, "%x---%x\n", pos, y->x_end);
+        // fprintf(stderr, "%x---%x\n", pos, y->x_end);
     } else {
         fprintf(stderr, "Too large y86 instruction size\n");
         longjmp(y->jmp, ys_ccf);
@@ -70,7 +70,7 @@ void y86_gen_after(Y_data *y) {
 }
 
 void y86_gen_stat(Y_data *y, Y_stat stat) {
-    YX(0x0F) YX(0xFE) YX(0x3D) YXA((Y_addr) &(y_static_num[stat]))
+    YX(0x0F) YX(0x6E) YX(0x3D) YXA((Y_addr) &(y_static_num[stat])) // movd , %mm6
 }
 
 Y_char y86_x_regbyte(Y_reg ra, Y_reg rb) {
@@ -96,7 +96,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
         case yi_rrmovl:
             // ra, rb >= 0
             if (ra < yr_cnt && rb < yr_cnt) {
-                YX(0x89) YX(y86_x_regbyte(ra, rb))
+                YX(0x89) YX(y86_x_regbyte(ra, rb)) // movl ...
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -185,6 +185,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
 
 void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
     y->reg[yr_pc] = *inst - begin;
+    y86_link_x_map(y, y->reg[yr_pc]);
 
     Y_inst op = **inst;
     (*inst)++;
@@ -255,9 +256,6 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
     }
 
     y86_gen_x(y, op, ra, rb, val);
-
-    // Link tail position
-    y86_link_x_map(y, y->reg[yr_pc]);
 }
 
 void y86_load(Y_data *y) {
@@ -266,7 +264,12 @@ void y86_load(Y_data *y) {
     Y_char *end = begin + y->reg[yr_len];
 
     y->x_end = &(y->x_inst[0]);
-    while (inst != end) y86_parse(y, begin, &inst, end);
+    y->reg[yr_pc] = 0;
+
+    while (inst != end) {
+        y86_parse(y, begin, &inst, end);
+    }
+    y86_link_x_map(y, y->reg[yr_pc] + 1);
     y86_gen_protect(y);
 
     y->reg[yr_pc] = 0;
@@ -306,6 +309,7 @@ void y86_debug_exec(Y_data *y) {
 void y86_ready(Y_data *y, Y_word step) {
     y->reg[yr_cc] = 0x40;
     y->reg[yr_rey] = (Y_word) y->x_map[y->reg[yr_pc]];
+    // printf("%x, %x", y->reg[yr_pc], y->x_map[0]);
     y->reg[yr_sx] = step;
     y->reg[yr_sc] = step;
     y->reg[yr_st] = ys_aok;
@@ -347,7 +351,7 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         "decl %%eax" "\n\t"
         "movd %%eax, %%mm6" "\n\t"
         "testl %%eax, %%eax" "\n\t"
-        "jz y86_fin" "\n\t"
+        "js y86_fin" "\n\t"
 
         // Check state
         "movd %%mm7, %%eax" "\n\t"
@@ -444,7 +448,7 @@ void y86_output_state(Y_data *y) {
     fprintf(
         stdout,
         "Stopped in %d steps at PC = 0x%x.  Status '%s', CC %s\n",
-        y->reg[yr_sx] - y->reg[yr_sc], y->reg[yr_pc], stat_names[7 & y->reg[yr_st]], cc_names[y86_cc_transform(y->reg[yr_cc])]
+        y->reg[yr_sx] - y->reg[yr_sc] - 1, y->reg[yr_pc] - 1, stat_names[7 & y->reg[yr_st]], cc_names[y86_cc_transform(y->reg[yr_cc])]
     );
 }
 
