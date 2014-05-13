@@ -49,22 +49,22 @@ typedef enum {
 } Y_stat;
 
 typedef enum {
-    yr_eax = 0x0,
-    yr_ecx = 0x1,
-    yr_edx = 0x2,
-    yr_ebx = 0x3,
-    yr_esp = 0x4,
-    yr_ebp = 0x5,
-    yr_esi = 0x6,
-    yr_edi = 0x7,
+    yr_edi = 0x0,
+    yr_esi = 0x1,
+    yr_ebp = 0x2,
+    yr_esp = 0x3,
+    yr_ebx = 0x4,
+    yr_edx = 0x5,
+    yr_ecx = 0x6,
+    yr_eax = 0x7,
     yr_cc  = 0x8, // Non-standard: Flags, ZF SF OF
     yr_rey = 0x9, // Non-standard: Y return address
     yr_rex = 0xA, // Non-standard: X return address
-    yr_len = 0xB, // Non-standard: Y inst size
-    yr_pc  = 0xC, // Non-standard: Y inst pointer
-    yr_sx  = 0xD, // Non-standard: Step max
-    yr_sc  = 0xE, // Non-standard: Step counter (decrease)
-    yr_st  = 0xF  // Non-standard: Stat
+    yr_pc  = 0xB, // Non-standard: Y inst pointer
+    yr_len = 0xC, // Non-standard: MM4: Y inst size
+    yr_sx  = 0xD, // Non-standard: MM5: Step max
+    yr_sc  = 0xE, // Non-standard: MM6: Step counter (decrease)
+    yr_st  = 0xF  // Non-standard: MM7: Stat
 } Y_reg;
 
 // MM0: X ESP

@@ -45,6 +45,12 @@ void y86_link_x_map(Y_data *y, Y_size pos) {
 
 void y86_gen_before(Y_data *y) {
     y86_push_x(y, 0x0F);
+    y86_push_x(y, 0x7E);
+    y86_push_x(y, 0xCC);
+}
+
+void y86_gen_after(Y_data *y) {
+    y86_push_x(y, 0x0F);
     y86_push_x(y, 0x6E);
     y86_push_x(y, 0xCC);
 
@@ -55,12 +61,6 @@ void y86_gen_before(Y_data *y) {
     y86_push_x(y, 0xFF);
     y86_push_x(y, 0x14);
     y86_push_x(y, 0x24);
-}
-
-void y86_gen_after(Y_data *y) {
-    y86_push_x(y, 0x0F);
-    y86_push_x(y, 0x7E);
-    y86_push_x(y, 0xCC);
 }
 
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
@@ -370,26 +370,21 @@ void y86_ready(Y_data *y, Y_word step) {
 
 void __attribute__ ((noinline)) y86_exec(Y_data *y) {
     __asm__ __volatile__ (
+        "pushal" "\n\t"
+
         "movd %%esp, %%mm0" "\n\t"
         "movl %0, %%esp" "\n\t"
 
-        "popl %%eax" "\n\t"
-        "popl %%ecx" "\n\t"
-        "popl %%edx" "\n\t"
-        "popl %%ebx" "\n\t"
-        "popl %%ebp" "\n\t" "movd %%ebp, %%mm1" "\n\t"
-        "popl %%ebp" "\n\t"
-        "popl %%esi" "\n\t"
-        "popl %%edi" "\n\t"
+        "movd 12(%%esp), %%mm1" "\n\t"
+        "popal" "\n\t"
 
-        "movd 12(%%esp), %%mm3" "\n\t"
         "movd 16(%%esp), %%mm4" "\n\t"
         "movd 20(%%esp), %%mm5" "\n\t"
         "movd 24(%%esp), %%mm6" "\n\t"
         "movd 28(%%esp), %%mm7" "\n\t"
 
         "addl $12, %%esp" "\n\t"
-        "pushl y86_inner" "\n\t"
+        "pushl $y86_inner" "\n\t"
         "movd %%esp, %%mm2" "\n\t"
         "pushl %%esp" "\n\t"
         "addl $24, (%%esp)" "\n\t"
@@ -413,22 +408,17 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
 
         "jnz y86_call" "\n\t"
 
-        "movd %%mm3, 12(%%esp)" "\n\t"
         "movd %%mm4, 16(%%esp)" "\n\t"
         "movd %%mm5, 20(%%esp)" "\n\t"
         "movd %%mm6, 24(%%esp)" "\n\t"
         "movd %%mm7, 28(%%esp)" "\n\t"
 
-        "pushl %%edi" "\n\t"
-        "pushl %%esi" "\n\t"
-        "pushl %%ebp" "\n\t"
-        "movd %%mm1, %%ebp" "\n\t" "pushl %%ebp" "\n\t"
-        "pushl %%ebx" "\n\t"
-        "pushl %%edx" "\n\t"
-        "pushl %%ecx" "\n\t"
-        "pushl %%eax" "\n\t"
+        "pushal" "\n\t"
+        "movd %%mm1, 12(%%esp)" "\n\t"
 
-        "movd %%mm0, %%esp"// "\n\t"
+        "movd %%mm0, %%esp" "\n\t"
+
+        "popal"// "\n\t"
         :
         : "r" (&y->reg[0])
     );
