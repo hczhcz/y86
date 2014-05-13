@@ -1,6 +1,7 @@
 #include "y86sim.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/mman.h>
 
 void y86_push_x(Y_data *y, Y_char value) {
@@ -368,8 +369,6 @@ void y86_ready(Y_data *y, Y_word step) {
 }
 
 void __attribute__ ((noinline)) y86_exec(Y_data *y) {
-    Y_addr rt = &(y->reg[0]);
-
     __asm__ __volatile__ (
         "movd %%esp, %%mm0" "\n\t"
         "movl %0, %%esp" "\n\t"
@@ -430,18 +429,9 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         "pushl %%eax" "\n\t"
 
         "movd %%mm0, %%esp"// "\n\t"
-        : "=r" (rt)
+        :
+        : "r" (&y->reg[0])
     );
-
-    #define Y_CM(x) __asm__ ("movd %0, %%mm" #x "\n" : "=r" (y->reg[x + yr_cnt]));
-    // Y_CM(0) Y_CM(1) Y_CM(2) Y_CM(3) Y_CM(4) Y_CM(5) Y_CM(6) Y_CM(7)
-    // Y_CM(8) Y_CM(9) Y_CM(10) Y_CM(11) Y_CM(12) Y_CM(13) Y_CM(14) Y_CM(15)
-    #undef Y_CM
-
-    #define Y_RM(x) __asm__ ("movd %%mm" #x ", %0\n" : "=r" (y->reg[x + yr_cnt]));
-    // Y_RM(0) Y_RM(1) Y_RM(2) Y_RM(3) Y_RM(4) Y_RM(5) Y_RM(6) Y_RM(7)
-    // Y_RM(8) Y_RM(9) Y_RM(10) Y_RM(11) Y_RM(12) Y_RM(13) Y_RM(14) Y_RM(15)
-    #undef Y_RM
 }
 
 void y86_output(Y_data *y) {
@@ -467,8 +457,10 @@ Y_word f_main(Y_char *fname, Y_word step) {
 
     if (!(y->reg[yr_st])) {
         // Load
-        y86_load_file(y, fname);
-        y86_load(y);
+        if (strcmp(fname, "nil")) {
+            y86_load_file(y, fname);
+            y86_load(y);
+        }
 
         // Exec
         #ifdef Y_DEBUG
