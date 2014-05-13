@@ -348,17 +348,15 @@ void y86_output_mem(Y_data *y) {
     }
 }
 
-Y_data *y86_new() {
-    Y_data *y = mmap(
+void y86_new(Y_data *y) {
+    mmap(
         0, sizeof(Y_data),
         PROT_READ | PROT_WRITE | PROT_EXEC,
-        MAP_PRIVATE | MAP_ANONYMOUS,
+        MAP_ANONYMOUS,
         -1, 0
     );
 
     y->x_end = &(y->x_inst[0]);
-
-    return y;
 }
 
 void y86_debug_exec(Y_data *y) {
@@ -367,18 +365,22 @@ void y86_debug_exec(Y_data *y) {
 }
 
 void y86_ready(Y_data *y, Y_word step) {
+    y->reg[yr_cc] = 0;
     y->reg[yr_sx] = step;
     y->reg[yr_sc] = step;
     y->reg[yr_st] = ys_aok;
 }
 
 void __attribute__ ((noinline)) y86_exec(Y_data *y) {
+    // printf("%x\n", y->reg);
     __asm__ __volatile__ (
         "pushal" "\n\t"
+        "pushfd" "\n\t"
 
         "movd %%esp, %%mm0" "\n\t"
         "movl %0, %%esp" "\n\t"
 
+        // Load data
         "movd 12(%%esp), %%mm1" "\n\t"
         "popal" "\n\t"
 
@@ -387,31 +389,45 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         "movd 24(%%esp), %%mm6" "\n\t"
         "movd 28(%%esp), %%mm7" "\n\t"
 
+        // Build callback stack
         "addl $12, %%esp" "\n\t"
-        "pushl $y86_inner" "\n\t"
+        "pushl $y86_call" "\n\t"
         "movd %%esp, %%mm2" "\n\t"
         "pushl %%esp" "\n\t"
         "addl $24, (%%esp)" "\n\t"
-        "subl $4, %%esp" "\n\t"
 
+        "subl $4, %%esp" "\n\t"
+        "popfd" "\n\t"
+
+        // Call
         "y86_call:" "\n\t"
 
-        "popfd" "\n\t"
-        "ret" "\n\t"
-
-        "y86_inner:" "\n\t"
-
-        "pushfd" "\n\t"
         "movd %%eax, %%mm3" "\n\t"
+        "pushfd" "\n\t"
 
+        // Check state
+        "movd %%mm7, %%eax" "\n\t"
+        "testl %%eax, %%eax" "\n\t"
+        "jz y86_fin" "\n\t"
+
+        // Check step
         "movd %%mm6, %%eax" "\n\t"
         "decl %%eax" "\n\t"
         "movd %%eax, %%mm6" "\n\t"
         "testl %%eax, %%eax" "\n\t"
+        "jz y86_fin" "\n\t"
+
+        "popfd" "\n\t"
         "movd %%mm3, %%eax" "\n\t"
 
-        "jnz y86_call" "\n\t"
+        "ret" "\n\t"
 
+        // Finished
+        "y86_fin:" "\n\t"
+
+        "movd %%mm3, %%eax" "\n\t"
+
+        // Restore data
         "movd %%mm4, 16(%%esp)" "\n\t"
         "movd %%mm5, 20(%%esp)" "\n\t"
         "movd %%mm6, 24(%%esp)" "\n\t"
@@ -422,6 +438,7 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
 
         "movd %%mm0, %%esp" "\n\t"
 
+        "popfd" "\n\t"
         "popal"// "\n\t"
         :
         : "r" (&y->reg[0])
@@ -445,7 +462,9 @@ void f_usage(Y_char *pname) {
 }
 
 Y_word f_main(Y_char *fname, Y_word step) {
-    Y_data *y = y86_new();
+    Y_data mem_y;
+    Y_data *y = &mem_y;
+    y86_new(y);
     Y_word result;
     y->reg[yr_st] = setjmp(y->jmp);
 

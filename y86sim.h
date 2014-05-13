@@ -37,15 +37,14 @@ typedef enum {
 } Y_inst;
 
 typedef enum {
-    ys_rdy = 0x0, // Non-standard: Ready but not started
-    ys_aok = 0x1, // Started (running)
-    ys_hlt = 0x2, // Halted
-    ys_adr = 0x3, // Address error
-    ys_ins = 0x4, // Instruction error
-    ys_clf = 0x5, // Non-standard: Loader error
-    ys_ccf = 0x6, // Non-standard: Compiler, error
-    ys_adp = 0x7, // Non-standard: ADR error caused by protected pc
-    ys_inp = 0x8  // Non-standard: INS error caused by protected pc
+    ys_aok = 0x0, // Started (running)
+    ys_hlt = 0x1, // Halted
+    ys_adr = 0x2, // Address error
+    ys_ins = 0x3, // Instruction error
+    ys_clf = 0x4, // Non-standard: Loader error
+    ys_ccf = 0x5, // Non-standard: Compiler, error
+    ys_adp = 0x6, // Non-standard: ADR error caused by protected pc
+    ys_inp = 0x7  // Non-standard: INS error caused by protected pc
 } Y_stat;
 
 typedef enum {
