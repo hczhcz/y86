@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+// #include <signal.h>
 #include <sys/mman.h>
 
 Y_data *y86_new() {
@@ -74,14 +75,20 @@ void y86_gen_stat(Y_data *y, Y_stat stat) {
 }
 
 void y86_gen_after_to(Y_data *y, Y_addr value) {
+    // If changed, size should be updated (for jump instruction etc.)
+
     YX(0x0F) YX(0x6E) YX(0xCC) // movd %esp, %mm1
     YX(0x0F) YX(0x7E) YX(0xD4) // movd %mm2, %esp
     YX(0x68) YXA(value) // push value
     YX(0xFF) YX(0x64) YX(0x24) YX(0x04) // jmp 4(%esp)
 }
 
-Y_char y86_x_regbyte(Y_reg ra, Y_reg rb) {
+Y_char y86_x_regbyte_C(Y_reg ra, Y_reg rb) {
     return 0xC0 | (ra >> 3) | rb;
+}
+
+Y_char y86_x_regbyte_8(Y_reg ra, Y_reg rb) {
+    return 0x80 | (ra >> 3) | rb;
 }
 
 void y86_gen_protect(Y_data *y) {
@@ -111,25 +118,25 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             if (ra < yr_cnt && rb < yr_cnt) {
                 switch (op) {
                     case yi_rrmovl:
-                        YX(0x89) YX(y86_x_regbyte(ra, rb)) // movl ...
+                        YX(0x89) YX(y86_x_regbyte_C(ra, rb)) // movl ...
                         break;
                     case yi_cmovle:
-                        YX(0x0F) YX(0x4E) YX(y86_x_regbyte(rb, ra)) // cmovle ...
+                        YX(0x0F) YX(0x4E) YX(y86_x_regbyte_C(rb, ra)) // cmovle ...
                         break;
                     case yi_cmovl:
-                        YX(0x0F) YX(0x4C) YX(y86_x_regbyte(rb, ra)) // cmovl ...
+                        YX(0x0F) YX(0x4C) YX(y86_x_regbyte_C(rb, ra)) // cmovl ...
                         break;
                     case yi_cmove:
-                        YX(0x0F) YX(0x44) YX(y86_x_regbyte(rb, ra)) // cmove ...
+                        YX(0x0F) YX(0x44) YX(y86_x_regbyte_C(rb, ra)) // cmove ...
                         break;
                     case yi_cmovne:
-                        YX(0x0F) YX(0x45) YX(y86_x_regbyte(rb, ra)) // cmovne ...
+                        YX(0x0F) YX(0x45) YX(y86_x_regbyte_C(rb, ra)) // cmovne ...
                         break;
                     case yi_cmovge:
-                        YX(0x0F) YX(0x4D) YX(y86_x_regbyte(rb, ra)) // cmovge ...
+                        YX(0x0F) YX(0x4D) YX(y86_x_regbyte_C(rb, ra)) // cmovge ...
                         break;
                     case yi_cmovg:
-                        YX(0x0F) YX(0x4F) YX(y86_x_regbyte(rb, ra)) // cmovg ...
+                        YX(0x0F) YX(0x4F) YX(y86_x_regbyte_C(rb, ra)) // cmovg ...
                         break;
                     default:
                         // Impossible
@@ -149,9 +156,9 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
         case yi_rmmovl:
             if (ra < yr_cnt && rb < yr_cnt) {
                 // TODO: check
-                YX(0x89) YX(y86_x_regbyte(ra, rb)) // movl ...
-                if (rb == yr_esp) YX(0x24) // For esp
-                YXW(val)
+                YX(0x89) YX(y86_x_regbyte_8(ra, rb)) // movl ...
+                // if (rb == yr_esp) YX(0x24) // For esp
+                YXW(val + (Y_word) &(y->mem[0]))
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -159,9 +166,9 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
         case yi_mrmovl:
             if (ra < yr_cnt && rb < yr_cnt) {
                 // TODO: check
-                YX(0x8B) YX(y86_x_regbyte(ra, rb)) // movl ...
-                if (rb == yr_esp) YX(0x24) // For esp
-                YXW(val)
+                YX(0x8B) YX(y86_x_regbyte_8(ra, rb)) // movl ...
+                // if (rb == yr_esp) YX(0x24) // For esp
+                YXW(val + (Y_word) &(y->mem[0]))
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -173,16 +180,16 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             if (ra < yr_cnt && rb < yr_cnt) {
                 switch (op) {
                     case yi_addl:
-                        YX(0x01) YX(y86_x_regbyte(ra, rb)) // addl ...
+                        YX(0x01) YX(y86_x_regbyte_C(ra, rb)) // addl ...
                         break;
                     case yi_subl:
-                        YX(0x29) YX(y86_x_regbyte(ra, rb)) // subl ...
+                        YX(0x29) YX(y86_x_regbyte_C(ra, rb)) // subl ...
                         break;
                     case yi_andl:
-                        YX(0x21) YX(y86_x_regbyte(ra, rb)) // andl ...
+                        YX(0x21) YX(y86_x_regbyte_C(ra, rb)) // andl ...
                         break;
                     case yi_xorl:
-                        YX(0x31) YX(y86_x_regbyte(ra, rb)) // xorl ...
+                        YX(0x31) YX(y86_x_regbyte_C(ra, rb)) // xorl ...
                         break;
                     default:
                         // Impossible
@@ -199,31 +206,57 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
         case yi_jne:
         case yi_jge:
         case yi_jg:
-        case yi_call:
-            if (val >= Y_Y_INST_SIZE || !y->x_map[val]) {
-                switch (op) {
-                    case yi_jmp:
-                    case yi_jle:
-                    case yi_jl:
-                    case yi_je:
-                    case yi_jne:
-                    case yi_jge:
-                    case yi_jg:
-                        break;
-                    case yi_call:
-                        break;
-                    default:
-                        // Impossible
-                        break;
+            if (val >= 0 && val < Y_Y_INST_SIZE) {
+                if (y->x_map[val]) {
+                    switch (op) {
+                        case yi_jmp:
+                            break;
+                        case yi_jle:
+                            YX(0x7F) YX(0x0F) // jg +15
+                            break;
+                        case yi_jl:
+                            YX(0x7D) YX(0x0F) // jge +15
+                            break;
+                        case yi_je:
+                            YX(0x75) YX(0x0F) // jne +15
+                            break;
+                        case yi_jne:
+                            YX(0x74) YX(0x0F) // je +15
+                            break;
+                        case yi_jge:
+                            YX(0x7C) YX(0x0F) // jl +15
+                            break;
+                        case yi_jg:
+                            YX(0x7E) YX(0x0F) // jle +15
+                            break;
+                        default:
+                            // Impossible
+                            break;
+                    }
+                    y86_gen_after_to(y, y->x_map[val]);
+                } else {
+                    y86_gen_stat(y, ys_inp);
                 }
             } else {
-                y86_gen_stat(y, ys_inp);
+                y86_gen_stat(y, ys_adp);
             }
             break;
-            //
+        case yi_call:
+            if (val >= 0 && val < Y_Y_INST_SIZE) {
+                if (y->x_map[val]) {
+                    // TODO:
+                    y86_gen_after_to(y, y->x_map[val]);
+                } else {
+                    y86_gen_stat(y, ys_inp);
+                }
+            } else {
+                y86_gen_stat(y, ys_adp);
+            }
             break;
         case yi_ret:
-            //
+            // TODO: check esp
+            // pop val
+            // jmp x_map[val]
             break;
         case yi_pushl:
             //
@@ -507,7 +540,7 @@ void y86_output_state(Y_data *y) {
     fprintf(
         stdout,
         "Stopped in %d steps at PC = 0x%x.  Status '%s', CC %s\n",
-        y->reg[yr_sx] - y->reg[yr_sc] - 1, y->reg[yr_pc] - 1, stat_names[7 & y->reg[yr_st]], cc_names[y86_cc_transform(y->reg[yr_cc])]
+        y->reg[yr_sx] - y->reg[yr_sc] - 1, y->reg[yr_pc] - !!y->reg[yr_st], stat_names[7 & y->reg[yr_st]], cc_names[y86_cc_transform(y->reg[yr_cc])]
     );
 }
 
@@ -549,11 +582,28 @@ void y86_free(Y_data *y) {
     munmap(y, sizeof(Y_data));
 }
 
+/*
+void f_signal() {
+    fprintf(stderr, "aaa\n");
+}
+
+void f_signal_init() {
+    struct sigaction sigIntHandler;
+
+    sigIntHandler.sa_handler = f_signal;
+    sigemptyset(&sigIntHandler.sa_mask);
+    sigIntHandler.sa_flags = 0;
+    sigaction(SIGINT, &sigIntHandler, NULL);
+    sigaction(SIGSEGV, &sigIntHandler, NULL);
+}*/
+
 void f_usage(Y_char *pname) {
     fprintf(stderr, "Usage: %s file.bin [max_steps]\n", pname);
 }
 
 Y_stat f_main(Y_char *fname, Y_word step) {
+    // f_signal_init();
+
     Y_data *y = y86_new();
     Y_stat result;
     y->reg[yr_st] = setjmp(y->jmp);
@@ -583,7 +633,7 @@ Y_stat f_main(Y_char *fname, Y_word step) {
     // Return
     result = y->reg[yr_st];
     y86_free(y);
-    return result != ys_hlt;
+    return result == ys_clf || result == ys_ccf;
 }
 
 int main(int argc, char *argv[]) {
