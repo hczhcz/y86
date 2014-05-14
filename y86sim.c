@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-// #include <signal.h>
 #include <sys/mman.h>
 
 Y_data *y86_new() {
@@ -53,7 +52,6 @@ void y86_push_x_addr(Y_data *y, Y_addr value) {
 void y86_link_x_map(Y_data *y, Y_size pos) {
     if (pos < Y_Y_INST_SIZE) {
         y->x_map[pos] = y->x_end;
-        // fprintf(stderr, "%x---%x\n", pos, y->x_end);
     } else {
         fprintf(stderr, "Too large y86 instruction size\n");
         longjmp(y->jmp, ys_ccf);
@@ -157,8 +155,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             if (ra < yr_cnt && rb < yr_cnt) {
                 // TODO: check
                 YX(0x89) YX(y86_x_regbyte_8(ra, rb)) // movl ...
-                // if (rb == yr_esp) YX(0x24) // For esp
-                YXW(val + (Y_word) &(y->mem[0]))
+                YXW(val/* + (Y_word) &(y->mem[0])*/)
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -167,8 +164,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             if (ra < yr_cnt && rb < yr_cnt) {
                 // TODO: check
                 YX(0x8B) YX(y86_x_regbyte_8(ra, rb)) // movl ...
-                // if (rb == yr_esp) YX(0x24) // For esp
-                YXW(val + (Y_word) &(y->mem[0]))
+                YXW(val/* + (Y_word) &(y->mem[0])*/)
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -404,7 +400,6 @@ void y86_ready(Y_data *y, Y_word step) {
 
     y->reg[yr_cc] = 0x40;
     y->reg[yr_rey] = (Y_word) y->x_map[y->reg[yr_pc]];
-    // printf("%x, %x", y->reg[yr_pc], y->x_map[0]);
     y->reg[yr_sx] = step;
     y->reg[yr_sc] = step;
     y->reg[yr_st] = ys_aok;
@@ -585,28 +580,11 @@ void y86_free(Y_data *y) {
     munmap(y, sizeof(Y_data));
 }
 
-/*
-void f_signal() {
-    fprintf(stderr, "aaa\n");
-}
-
-void f_signal_init() {
-    struct sigaction sigIntHandler;
-
-    sigIntHandler.sa_handler = f_signal;
-    sigemptyset(&sigIntHandler.sa_mask);
-    sigIntHandler.sa_flags = 0;
-    sigaction(SIGINT, &sigIntHandler, NULL);
-    sigaction(SIGSEGV, &sigIntHandler, NULL);
-}*/
-
 void f_usage(Y_char *pname) {
     fprintf(stderr, "Usage: %s file.bin [max_steps]\n", pname);
 }
 
 Y_stat f_main(Y_char *fname, Y_word step) {
-    // f_signal_init();
-
     Y_data *y = y86_new();
     Y_stat result;
     y->reg[yr_st] = setjmp(y->jmp);
