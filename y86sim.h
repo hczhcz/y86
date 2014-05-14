@@ -76,8 +76,9 @@ const Y_reg yr_cn2 = 0x10; // Another counting
 const Y_reg yr_nil = 0x0f; // Null
 
 typedef struct {
-    Y_char y_inst[Y_Y_INST_SIZE];
+    Y_char bak_mem[Y_MEM_SIZE];
     Y_char mem[Y_MEM_SIZE];
+    Y_word bak_reg[yr_cn2];
     Y_word reg[yr_cn2];
     Y_char x_inst[Y_X_INST_SIZE];
     Y_char *x_end;

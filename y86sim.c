@@ -351,7 +351,7 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
 }
 
 void y86_load(Y_data *y) {
-    Y_char *begin = &(y->y_inst[0]);
+    Y_char *begin = &(y->mem[0]);
     Y_char *inst = begin;
     Y_char *end = begin + y->reg[yr_len];
 
@@ -370,7 +370,7 @@ void y86_load(Y_data *y) {
 void y86_load_file_bin(Y_data *y, FILE *binfile) {
     clearerr(binfile);
 
-    y->reg[yr_len] = fread(&(y->y_inst[0]), sizeof(Y_char), Y_Y_INST_SIZE, binfile);
+    y->reg[yr_len] = fread(&(y->mem[0]), sizeof(Y_char), Y_Y_INST_SIZE, binfile);
     if (ferror(binfile)) {
         fprintf(stderr, "fread() failed (0x%x)\n", y->reg[yr_len]);
         longjmp(y->jmp, ys_clf);
@@ -399,6 +399,9 @@ void y86_debug_exec(Y_data *y) {
 }
 
 void y86_ready(Y_data *y, Y_word step) {
+    memcpy(&(y->bak_mem[0]), &(y->mem[0]), sizeof(y->bak_mem));
+    memcpy(&(y->bak_reg[0]), &(y->reg[0]), sizeof(y->bak_reg));
+
     y->reg[yr_cc] = 0x40;
     y->reg[yr_rey] = (Y_word) y->x_map[y->reg[yr_pc]];
     // printf("%x, %x", y->reg[yr_pc], y->x_map[0]);
@@ -553,8 +556,8 @@ void y86_output_reg(Y_data *y) {
 
     fprintf(stdout, "Changes to registers:\n");
     for (index = yr_cnt - 1; (Y_word) index >= 0; --index) {
-        if (y->reg[index]) {
-            fprintf(stdout, "%s:\t0x%.8x\t0x%.8x\n", reg_names[index], 0, y->reg[index]);
+        if (y->reg[index] != y->bak_reg[index]) {
+            fprintf(stdout, "%s:\t0x%.8x\t0x%.8x\n", reg_names[index], y->bak_reg[index], y->reg[index]);
         }
     }
 }
@@ -564,8 +567,8 @@ void y86_output_mem(Y_data *y) {
 
     fprintf(stdout, "Changes to memory:\n");
     for (index = 0; index < Y_MEM_SIZE; ++index) {
-        if (y->mem[index]) {
-            fprintf(stdout, "0x%.4x:\t0x%.8x\t0x%.8x\n", index, 0, y->mem[index]);
+        if (y->mem[index] != y->bak_mem[index]) {
+            fprintf(stdout, "0x%.4x:\t0x%.8x\t0x%.8x\n", index, y->bak_mem[index], y->mem[index]);
         }
     }
 }
