@@ -416,9 +416,6 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         // Load data
         "movd 12(%%esp), %%mm1" "\n\t"
         "popal" "\n\t"
-
-        "movd 16(%%esp), %%mm4" "\n\t"
-        "movd 20(%%esp), %%mm5" "\n\t"
         "movd 24(%%esp), %%mm6" "\n\t"
         "movd 28(%%esp), %%mm7" "\n\t"
 
@@ -459,11 +456,8 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         "movd %%mm3, %%eax" "\n\t"
 
         // Restore data
-        "movd %%mm4, 16(%%esp)" "\n\t"
-        "movd %%mm5, 20(%%esp)" "\n\t"
-        "movd %%mm6, 24(%%esp)" "\n\t"
         "movd %%mm7, 28(%%esp)" "\n\t"
-
+        "movd %%mm6, 24(%%esp)" "\n\t"
         "pushal" "\n\t"
         "movd %%mm1, 12(%%esp)" "\n\t"
 
@@ -510,6 +504,12 @@ void y86_output_error(Y_data *y) {
         case ys_inp:
             fprintf(stdout, "PC = 0x%x, Invalid instruction detected staticly\n", y->reg[yr_pc]);
             break;
+        case ys_mir:
+            fprintf(stdout, "PC = 0x%x, Invalid instruction address on read\n", y->reg[yr_pc]);
+            break;
+        case ys_miw:
+            fprintf(stdout, "PC = 0x%x, Invalid instruction address on write\n", y->reg[yr_pc]);
+            break;
         default:
             break;
     }
@@ -520,8 +520,8 @@ Y_word y86_cc_transform(Y_word cc_x) {
 }
 
 void y86_output_state(Y_data *y) {
-    const Y_char *stat_names[8] = {
-        "AOK", "HLT", "ADR", "INS", "", "", "ADR", "INS"
+    const Y_char *stat_names[10] = {
+        "AOK", "HLT", "ADR", "INS", "", "", "ADR", "INS", "ADR", "ADR"
     };
 
     const Y_char *cc_names[8] = {

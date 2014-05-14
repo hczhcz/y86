@@ -7,9 +7,10 @@
 #define LOW(pack) ((pack) & 0xF)
 
 #define Y_MEM_SIZE 0x2000
-#define Y_MEM_MASK 0x1FFF
 #define Y_X_INST_SIZE 0x1000
 #define Y_Y_INST_SIZE 0x0200
+#define Y_MASK_NOT_MEM "0xFFFFE000" // "0x1FFF"
+#define Y_MASK_NOT_INST "0xFFFFFE00" // "0x01FF"
 #define Y_PROTECT_MEM // Protect mem[>= mem_size]
 #define Y_DEBUG
 // #define Y_STEP_MAX_DEFAULT 10000
@@ -44,7 +45,9 @@ typedef enum {
     ys_clf = 0x4, // Non-standard: Loader error
     ys_ccf = 0x5, // Non-standard: Compiler, error
     ys_adp = 0x6, // Non-standard: ADR error caused by mem protection
-    ys_inp = 0x7  // Non-standard: INS error caused by mem protection
+    ys_inp = 0x7, // Non-standard: INS error caused by mem protection
+    ys_mir = 0x8, // Non-standard: Memory read interrupt, for range checking
+    ys_miw = 0x9  // Non-standard: Memory write interrupt, for range checking
 } Y_stat;
 
 typedef enum {
@@ -60,8 +63,8 @@ typedef enum {
     yr_rey = 0x9, // Non-standard: Y return address
     yr_rex = 0xA, // Non-standard: X return address
     yr_pc  = 0xB, // Non-standard: Y inst pointer
-    yr_len = 0xC, // Non-standard: MM4: Y inst size
-    yr_sx  = 0xD, // Non-standard: MM5: Step max
+    yr_len = 0xC, // Non-standard: Y inst size
+    yr_sx  = 0xD, // Non-standard: Step max
     yr_sc  = 0xE, // Non-standard: MM6: Step counter (decrease)
     yr_st  = 0xF  // Non-standard: MM7: Stat
 } Y_reg;
@@ -70,6 +73,9 @@ typedef enum {
 // MM1: Y ESP
 // MM2: Mid ESP
 // MM3: Temp
+// MM4: Mem pointer
+// MM5: Mem value
+
 
 const Y_reg yr_cnt = 0x08; // Counting, not a register
 const Y_reg yr_cn2 = 0x10; // Another counting
