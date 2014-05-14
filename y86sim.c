@@ -70,7 +70,14 @@ void y86_gen_after(Y_data *y) {
 }
 
 void y86_gen_stat(Y_data *y, Y_stat stat) {
-    YX(0x0F) YX(0x6E) YX(0x3D) YXA((Y_addr) &(y_static_num[stat])) // movd , %mm6
+    YX(0x0F) YX(0x6E) YX(0x3D) YXA((Y_addr) &(y_static_num[stat])) // movd stat, %mm6
+}
+
+void y86_gen_after_to(Y_data *y, Y_addr value) {
+    YX(0x0F) YX(0x6E) YX(0xCC) // movd %esp, %mm1
+    YX(0x0F) YX(0x7E) YX(0xD4) // movd %mm2, %esp
+    YX(0x68) YXA(value) // push value
+    YX(0xFF) YX(0x64) YX(0x24) YX(0x04) // jmp 4(%esp)
 }
 
 Y_char y86_x_regbyte(Y_reg ra, Y_reg rb) {
@@ -86,6 +93,7 @@ void y86_gen_protect(Y_data *y) {
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
     y86_gen_before(y);
 
+    // Always: ra, rb >= 0
     switch (op) {
         case yi_halt:
             y86_gen_stat(y, ys_hlt);
@@ -94,74 +102,124 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             // Nothing
             break;
         case yi_rrmovl:
-            // ra, rb >= 0
+        case yi_cmovle:
+        case yi_cmovl:
+        case yi_cmove:
+        case yi_cmovne:
+        case yi_cmovge:
+        case yi_cmovg:
             if (ra < yr_cnt && rb < yr_cnt) {
-                YX(0x89) YX(y86_x_regbyte(ra, rb)) // movl ...
+                switch (op) {
+                    case yi_rrmovl:
+                        YX(0x89) YX(y86_x_regbyte(ra, rb)) // movl ...
+                        break;
+                    case yi_cmovle:
+                        YX(0x0F) YX(0x4E) YX(y86_x_regbyte(rb, ra)) // cmovle ...
+                        break;
+                    case yi_cmovl:
+                        YX(0x0F) YX(0x4C) YX(y86_x_regbyte(rb, ra)) // cmovl ...
+                        break;
+                    case yi_cmove:
+                        YX(0x0F) YX(0x44) YX(y86_x_regbyte(rb, ra)) // cmove ...
+                        break;
+                    case yi_cmovne:
+                        YX(0x0F) YX(0x45) YX(y86_x_regbyte(rb, ra)) // cmovne ...
+                        break;
+                    case yi_cmovge:
+                        YX(0x0F) YX(0x4D) YX(y86_x_regbyte(rb, ra)) // cmovge ...
+                        break;
+                    case yi_cmovg:
+                        YX(0x0F) YX(0x4F) YX(y86_x_regbyte(rb, ra)) // cmovg ...
+                        break;
+                    default:
+                        // Impossible
+                        break;
+                }
             } else {
                 y86_gen_stat(y, ys_ins);
             }
             break;
-        case yi_cmovle:
-            //
-            break;
-        case yi_cmovl:
-            //
-            break;
-        case yi_cmove:
-            //
-            break;
-        case yi_cmovne:
-            //
-            break;
-        case yi_cmovge:
-            //
-            break;
-        case yi_cmovg:
-            //
-            break;
         case yi_irmovl:
-            //
+            if (ra == yr_nil && rb < yr_cnt) {
+                YX(0xB8 + rb) YXW(val) // movl ...
+            } else {
+                y86_gen_stat(y, ys_ins);
+            }
             break;
         case yi_rmmovl:
-            //
+            if (ra < yr_cnt && rb < yr_cnt) {
+                // TODO: check
+                YX(0x89) YX(y86_x_regbyte(ra, rb)) // movl ...
+                if (rb == yr_esp) YX(0x24) // For esp
+                YXW(val)
+            } else {
+                y86_gen_stat(y, ys_ins);
+            }
             break;
         case yi_mrmovl:
-            //
+            if (ra < yr_cnt && rb < yr_cnt) {
+                // TODO: check
+                YX(0x8B) YX(y86_x_regbyte(ra, rb)) // movl ...
+                if (rb == yr_esp) YX(0x24) // For esp
+                YXW(val)
+            } else {
+                y86_gen_stat(y, ys_ins);
+            }
             break;
         case yi_addl:
-            //
-            break;
         case yi_subl:
-            //
-            break;
         case yi_andl:
-            //
-            break;
         case yi_xorl:
-            //
-            break;        
+            if (ra < yr_cnt && rb < yr_cnt) {
+                switch (op) {
+                    case yi_addl:
+                        YX(0x01) YX(y86_x_regbyte(ra, rb)) // addl ...
+                        break;
+                    case yi_subl:
+                        YX(0x29) YX(y86_x_regbyte(ra, rb)) // subl ...
+                        break;
+                    case yi_andl:
+                        YX(0x21) YX(y86_x_regbyte(ra, rb)) // andl ...
+                        break;
+                    case yi_xorl:
+                        YX(0x31) YX(y86_x_regbyte(ra, rb)) // xorl ...
+                        break;
+                    default:
+                        // Impossible
+                        break;
+                }
+            } else {
+                y86_gen_stat(y, ys_ins);
+            }
+            break;
         case yi_jmp:
-            //
-            break;
         case yi_jle:
-            //
-            break;
         case yi_jl:
-            //
-            break;
         case yi_je:
-            //
-            break;
         case yi_jne:
-            //
-            break;
         case yi_jge:
-            //
-            break;
         case yi_jg:
-            //
-            break;
         case yi_call:
+            if (val >= Y_Y_INST_SIZE || !y->x_map[val]) {
+                switch (op) {
+                    case yi_jmp:
+                    case yi_jle:
+                    case yi_jl:
+                    case yi_je:
+                    case yi_jne:
+                    case yi_jge:
+                    case yi_jg:
+                        break;
+                    case yi_call:
+                        break;
+                    default:
+                        // Impossible
+                        break;
+                }
+            } else {
+                y86_gen_stat(y, ys_inp);
+            }
+            break;
             //
             break;
         case yi_ret:
@@ -174,9 +232,10 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             //
             break;
         case yi_bad:
-            //
+            y86_gen_stat(y, ys_ins);
             break;
         default:
+            // Impossible
             break;
     }
 
