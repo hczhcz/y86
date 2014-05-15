@@ -389,11 +389,6 @@ void y86_load_file(Y_data *y, Y_char *fname) {
     }
 }
 
-void y86_debug_exec(Y_data *y) {
-    y86_gen_x(y, yi_halt, yr_nil, yr_nil, 0);
-    y->reg[yr_st] = ys_hlt;
-}
-
 void y86_ready(Y_data *y, Y_word step) {
     memcpy(&(y->bak_mem[0]), &(y->mem[0]), sizeof(y->bak_mem));
     memcpy(&(y->bak_reg[0]), &(y->reg[0]), sizeof(y->bak_reg));
@@ -597,10 +592,6 @@ Y_stat f_main(Y_char *fname, Y_word step) {
         }
 
         // Exec
-        #ifdef Y_DEBUG
-        y86_debug_exec(y);
-        #endif
-
         y86_ready(y, step);
         y86_exec(y);
         y86_trace_pc(y);

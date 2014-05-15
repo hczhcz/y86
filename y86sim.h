@@ -12,7 +12,6 @@
 #define Y_MASK_NOT_MEM "0xFFFFE000" // "0x1FFF"
 #define Y_MASK_NOT_INST "0xFFFFFE00" // "0x01FF"
 #define Y_PROTECT_MEM // Protect mem[>= mem_size]
-#define Y_DEBUG
 // #define Y_STEP_MAX_DEFAULT 10000
 
 typedef char Y_char;
