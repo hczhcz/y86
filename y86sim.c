@@ -96,7 +96,7 @@ void y86_gen_protect(Y_data *y) {
 }
 
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
-    y86_gen_before(y);
+    // y86_gen_before(y);
 
     // Always: ra, rb >= 0
     switch (op) {
@@ -268,13 +268,10 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             break;
     }
 
-    y86_gen_after(y);
+    // y86_gen_after(y);
 }
 
 void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
-    y->reg[yr_pc] = *inst - begin;
-    y86_link_x_map(y, y->reg[yr_pc]);
-
     Y_inst op = **inst;
     (*inst)++;
 
@@ -346,21 +343,36 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
     y86_gen_x(y, op, ra, rb, val);
 }
 
+void y86_load_reset(Y_data *y) {
+    y->reg[yr_pc] = 0;
+}
+
 void y86_load(Y_data *y) {
     Y_char *begin = &(y->mem[0]);
-    Y_char *inst = begin;
+    Y_char *inst;
     Y_char *end = begin + y->reg[yr_len];
 
-    y->x_end = &(y->x_inst[0]);
-    y->reg[yr_pc] = 0;
+    Y_word pc = y->reg[yr_pc];
 
-    while (inst != end) {
+    y->x_end = &(y->x_inst[0]);
+
+    for (inst = begin; inst != end;) {
+        y->reg[yr_pc] = inst - begin;
+        y86_link_x_map(y, y->reg[yr_pc]);
+
+        y86_gen_before(y);
         y86_parse(y, begin, &inst, end);
+        y86_gen_after(y);
     }
+
     y86_link_x_map(y, y->reg[yr_pc] + 1);
     y86_gen_protect(y);
 
-    y->reg[yr_pc] = 0;
+    y->reg[yr_pc] = pc;
+}
+
+void y86_reload_ptr(Y_data *y, Y_addr *changed) {
+    // TODO
 }
 
 void y86_load_file_bin(Y_data *y, FILE *binfile) {
