@@ -412,10 +412,17 @@ void y86_ready(Y_data *y, Y_word step) {
     memcpy(&(y->bak_reg[0]), &(y->reg[0]), sizeof(y->bak_reg));
 
     y->reg[yr_cc] = 0x40;
-    y->reg[yr_rey] = (Y_word) y->x_map[y->reg[yr_pc]];
     y->reg[yr_sx] = step;
     y->reg[yr_sc] = step;
     y->reg[yr_st] = ys_aok;
+}
+
+void y86_trace_ip(Y_data *y) {
+    if (y->x_map[y->reg[yr_pc]]) {
+        y->reg[yr_rey] = (Y_word) y->x_map[y->reg[yr_pc]];    
+    } else {
+        // TODO
+    }
 }
 
 void __attribute__ ((noinline)) y86_exec(Y_data *y) {
@@ -532,6 +539,19 @@ void y86_trace_pc(Y_data *y) {
     }
 }
 
+void y86_go(Y_data *y, Y_word step) {
+    y86_ready(y, step);
+    do {
+        y86_trace_ip(y);
+        y86_exec(y);
+        y86_trace_pc(y);
+        if (y->reg[yr_st] >= ys_cnt) {
+            //
+            continue;
+        }
+    } while (0);
+}
+
 void y86_output_error(Y_data *y) {
     switch (y->reg[yr_st]) {
         case ys_adr:
@@ -641,13 +661,12 @@ Y_stat f_main(Y_char *fname, Y_word step) {
         // Load
         if (strcmp(fname, "nil")) {
             y86_load_file(y, fname);
+            y86_load_reset(y);
             y86_load(y);
         }
 
         // Exec
-        y86_ready(y, step);
-        y86_exec(y);
-        y86_trace_pc(y);
+        y86_go(y, step);
     } else {
         // Jumped out
     }
