@@ -64,25 +64,28 @@ void y86_gen_before(Y_data *y) {
 
 void y86_gen_after(Y_data *y) {
     YX(0x0F) YX(0x6E) YX(0xCC) // movd %esp, %mm1
+}
+
+void y86_gen_check(Y_data *y) {
     YX(0x0F) YX(0x7E) YX(0xD4) // movd %mm2, %esp
     YX(0xFF) YX(0x14) YX(0x24) // call (%esp)
 }
 
-void y86_gen_stat(Y_data *y, Y_stat stat) {
-    YX(0x0F) YX(0x6E) YX(0x3D) YXA(&(y_static_num[stat])) // movd stat, %mm6
-}
-
-void y86_gen_after_to(Y_data *y, Y_addr value) {
+void y86_gen_after_goto(Y_data *y, Y_addr value) {
     // If changed, size should be updated (for jump instruction etc.)
 
-    YX(0x0F) YX(0x6E) YX(0xCC) // movd %esp, %mm1
+    y86_gen_after(y);
     YX(0x0F) YX(0x7E) YX(0xD4) // movd %mm2, %esp
     YX(0x68) YXA(value) // push value
     YX(0xFF) YX(0x64) YX(0x24) YX(0x04) // jmp 4(%esp)
 }
 
-y86_gen_jmp(Y_data *y, Y_addr value) {
-    // TODO
+void y86_gen_stat(Y_data *y, Y_stat stat) {
+    YX(0x0F) YX(0x6E) YX(0x3D) YXA((Y_addr) &(y_static_num[stat])) // movd stat, %mm6
+}
+
+void y86_gen_raw_jmp(Y_data *y, Y_addr value) {
+    YX(0xFF) YX(0x25) YXA(value) // jmp *value
 }
 
 Y_char y86_x_regbyte_C(Y_reg ra, Y_reg rb) {
@@ -97,17 +100,21 @@ void y86_gen_protect(Y_data *y) {
     y86_gen_before(y);
     y86_gen_stat(y, ys_inp); // TODO: hlt?
     y86_gen_after(y);
+    y86_gen_check(y);
 }
 
-void y86_gen_interrupt(Y_data *y, Y_stat stat) {
+void y86_gen_interrupt_ready(Y_data *y, Y_stat stat) {
     y86_gen_stat(y, stat);
     y86_gen_after(y);
+}
+
+void y86_gen_interrupt_go(Y_data *y) {
+    YX(0x0F) YX(0x6E) YX(0xE4) // movd %esp, %mm4
+    y86_gen_check(y);
     y86_gen_before(y);
 }
 
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
-    // y86_gen_before(y);
-
     // Always: ra, rb >= 0
     switch (op) {
         case yi_halt:
@@ -163,18 +170,28 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             break;
         case yi_rmmovl:
             if (ra < yr_cnt && rb < yr_cnt) {
-                // TODO: check
+                y86_gen_interrupt_ready(y, ys_ima);
+                // TODO addr, put something in esp -> mm4
+                y86_gen_interrupt_go(y);
+
                 YX(0x89) YX(y86_x_regbyte_8(ra, rb)) // movl ...
-                YXW(val/* + (Y_word) &(y->mem[0])*/)
+                YXW(val + (Y_word) &(y->mem[0]))
+
+                y86_gen_interrupt_ready(y, ys_imc);
+                // TODO addr
+                y86_gen_interrupt_go(y);
             } else {
                 y86_gen_stat(y, ys_ins);
             }
             break;
         case yi_mrmovl:
             if (ra < yr_cnt && rb < yr_cnt) {
-                // TODO: check
+                y86_gen_interrupt_ready(y, ys_ima);
+                // TODO addr
+                y86_gen_interrupt_go(y);
+
                 YX(0x8B) YX(y86_x_regbyte_8(ra, rb)) // movl ...
-                YXW(val/* + (Y_word) &(y->mem[0])*/)
+                YXW(val + (Y_word) &(y->mem[0]))
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -239,7 +256,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
                             // Impossible
                             break;
                     }
-                    y86_gen_after_to(y, y->x_map[val]);
+                    y86_gen_after_goto(y, y->x_map[val]);
                 } else {
                     y86_gen_stat(y, ys_inp); // TODO: use load()
                 }
@@ -250,8 +267,17 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
         case yi_call:
             if (val >= 0 && val < Y_Y_INST_SIZE) {
                 if (y->x_map[val]) {
-                    // TODO:
-                    y86_gen_after_to(y, y->x_map[val]);
+                    y86_gen_interrupt_ready(y, ys_ima);
+                    // TODO esp -= 4
+                    y86_gen_interrupt_go(y);
+
+                    // TODO push y->reg[yr_pc] + 1
+
+                    y86_gen_interrupt_ready(y, ys_imc);
+                    // Just keep esp
+                    y86_gen_interrupt_go(y);
+
+                    y86_gen_after_goto(y, y->x_map[val]);
                 } else {
                     y86_gen_stat(y, ys_inp); // TODO: use load()
                 }
@@ -260,15 +286,26 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             }
             break;
         case yi_ret:
-            // TODO: check esp
-            // pop val
-            // jmp x_map[val]
+            y86_gen_stat(y, ys_ret);
+
             break;
         case yi_pushl:
-            //
+            y86_gen_interrupt_ready(y, ys_ima);
+            // TODO esp -= 4
+            y86_gen_interrupt_go(y);
+
+            // TODO push
+
+            y86_gen_interrupt_ready(y, ys_imc);
+            // Just keep esp
+            y86_gen_interrupt_go(y);
             break;
         case yi_popl:
-            //
+            y86_gen_interrupt_ready(y, ys_ima);
+            // Just keep esp
+            y86_gen_interrupt_go(y);
+
+            // TODO pop
             break;
         case yi_bad:
             y86_gen_stat(y, ys_ins);
@@ -277,8 +314,6 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             // Impossible
             break;
     }
-
-    // y86_gen_after(y);
 }
 
 void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
@@ -371,13 +406,14 @@ void y86_load(Y_data *y, Y_char *begin) {
         y->reg[yr_pc] = inst - begin;
 
         if (y->x_map[y->reg[yr_pc]]) {
-            y86_gen_jmp(y, y->x_map[y->reg[yr_pc]]);
+            y86_gen_raw_jmp(y, y->x_map[y->reg[yr_pc]]);
         } else {
             y86_link_x_map(y, y->reg[yr_pc]);
 
             y86_gen_before(y);
             y86_parse(y, begin, &inst, end);
             y86_gen_after(y);
+            y86_gen_check(y);
         }
     }
 

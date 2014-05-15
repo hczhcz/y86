@@ -8,7 +8,7 @@
 #define STR(data) #data
 
 #define Y_MEM_SIZE 0x2000
-#define Y_X_INST_SIZE 0x1000
+#define Y_X_INST_SIZE 0x2000
 #define Y_Y_INST_SIZE 0x0200
 #define Y_MASK_NOT_MEM "0xFFFFE000" // "0x1FFF"
 #define Y_MASK_NOT_INST "0xFFFFFE00" // "0x01FF"
@@ -45,9 +45,9 @@ typedef enum {
     ys_ccf = 0x5, // Non-standard: Compiler, error
     ys_adp = 0x6, // Non-standard: ADR error caused by mem protection
     ys_inp = 0x7, // Non-standard: INS error caused by mem protection
-    ys_mia = 0x8, // Non-standard: Memory access interrupt, range checking
-    ys_mim = 0x9, // Non-standard: Memory changed interrupt, check if instruction changed
-    ys_mij = 0xA  // Non-standard: Memory raw jump interrupt, map to x_inst
+    ys_ima = 0x8, // Non-standard: Memory access interrupt, range checking
+    ys_imc = 0x9, // Non-standard: Memory changed interrupt, check if instruction changed, load if necessary
+    ys_ret = 0xA  // Non-standard: Ret interrupt, check and pop esp, map to x_inst, jump (and load if necessary)
 } Y_stat;
 
 const Y_stat ys_cnt = 0x8; // Normal stat if below
@@ -75,7 +75,7 @@ typedef enum {
 // MM1: Y ESP
 // MM2: Mid ESP
 // MM3: Temp
-// MM4: Mem pointer
+// MM4: Mem pointer, for ys_ima and ys_imc
 // MM5: ???
 
 
