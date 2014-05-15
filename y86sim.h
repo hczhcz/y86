@@ -17,9 +17,8 @@
 
 typedef char Y_char;
 typedef int Y_word;
-typedef unsigned int Y_size;
 typedef void (*Y_func)(void);
-typedef void *Y_addr;
+typedef Y_char *Y_addr;
 
 typedef enum {
     yi_halt   = 0x00,
@@ -90,8 +89,8 @@ typedef struct {
     Y_word bak_reg[yr_cn2];
     Y_word reg[yr_cn2];
     Y_char x_inst[Y_X_INST_SIZE];
-    Y_char *x_end;
-    Y_char *(x_map[Y_Y_INST_SIZE]);
+    Y_addr x_end;
+    Y_addr x_map[Y_Y_INST_SIZE];
     jmp_buf jmp;
 } Y_data;
 

@@ -49,7 +49,7 @@ void y86_push_x_addr(Y_data *y, Y_addr value) {
     }
 }
 
-void y86_link_x_map(Y_data *y, Y_size pos) {
+void y86_link_x_map(Y_data *y, Y_word pos) {
     if (pos < Y_Y_INST_SIZE) {
         y->x_map[pos] = y->x_end;
     } else {
@@ -69,7 +69,7 @@ void y86_gen_after(Y_data *y) {
 }
 
 void y86_gen_stat(Y_data *y, Y_stat stat) {
-    YX(0x0F) YX(0x6E) YX(0x3D) YXA((Y_addr) &(y_static_num[stat])) // movd stat, %mm6
+    YX(0x0F) YX(0x6E) YX(0x3D) YXA(&(y_static_num[stat])) // movd stat, %mm6
 }
 
 void y86_gen_after_to(Y_data *y, Y_addr value) {
@@ -79,6 +79,10 @@ void y86_gen_after_to(Y_data *y, Y_addr value) {
     YX(0x0F) YX(0x7E) YX(0xD4) // movd %mm2, %esp
     YX(0x68) YXA(value) // push value
     YX(0xFF) YX(0x64) YX(0x24) YX(0x04) // jmp 4(%esp)
+}
+
+y86_gen_jmp(Y_data *y, Y_addr value) {
+    // TODO
 }
 
 Y_char y86_x_regbyte_C(Y_reg ra, Y_reg rb) {
@@ -91,7 +95,7 @@ Y_char y86_x_regbyte_8(Y_reg ra, Y_reg rb) {
 
 void y86_gen_protect(Y_data *y) {
     y86_gen_before(y);
-    y86_gen_stat(y, ys_inp);
+    y86_gen_stat(y, ys_inp); // TODO: hlt?
     y86_gen_after(y);
 }
 
@@ -237,7 +241,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
                     }
                     y86_gen_after_to(y, y->x_map[val]);
                 } else {
-                    y86_gen_stat(y, ys_inp);
+                    y86_gen_stat(y, ys_inp); // TODO: use load()
                 }
             } else {
                 y86_gen_stat(y, ys_adp);
@@ -249,7 +253,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
                     // TODO:
                     y86_gen_after_to(y, y->x_map[val]);
                 } else {
-                    y86_gen_stat(y, ys_inp);
+                    y86_gen_stat(y, ys_inp); // TODO: use load()
                 }
             } else {
                 y86_gen_stat(y, ys_adp);
@@ -350,25 +354,31 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
 }
 
 void y86_load_reset(Y_data *y) {
-    y->reg[yr_pc] = 0;
+    Y_word index;
+    for (index = 0; index < Y_Y_INST_SIZE; ++index) {
+        y->x_map[index] = 0;
+    }
+    y->x_end = &(y->x_inst[0]);
 }
 
-void y86_load(Y_data *y) {
-    Y_char *begin = &(y->mem[0]);
+void y86_load(Y_data *y, Y_char *begin) {
     Y_char *inst;
-    Y_char *end = begin + y->reg[yr_len];
+    Y_char *end = &(y->mem[y->reg[yr_len]]);
 
     Y_word pc = y->reg[yr_pc];
 
-    y->x_end = &(y->x_inst[0]);
-
     for (inst = begin; inst != end;) {
         y->reg[yr_pc] = inst - begin;
-        y86_link_x_map(y, y->reg[yr_pc]);
 
-        y86_gen_before(y);
-        y86_parse(y, begin, &inst, end);
-        y86_gen_after(y);
+        if (y->x_map[y->reg[yr_pc]]) {
+            y86_gen_jmp(y, y->x_map[y->reg[yr_pc]]);
+        } else {
+            y86_link_x_map(y, y->reg[yr_pc]);
+
+            y86_gen_before(y);
+            y86_parse(y, begin, &inst, end);
+            y86_gen_after(y);
+        }
     }
 
     y86_link_x_map(y, y->reg[yr_pc] + 1);
@@ -377,8 +387,9 @@ void y86_load(Y_data *y) {
     y->reg[yr_pc] = pc;
 }
 
-void y86_reload_ptr(Y_data *y, Y_addr *changed) {
-    // TODO
+void y86_load_all(Y_data *y) {
+    y86_load_reset(y);
+    y86_load(y, &(y->mem[0]));
 }
 
 void y86_load_file_bin(Y_data *y, FILE *binfile) {
@@ -526,7 +537,7 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
 }
 
 void y86_trace_pc(Y_data *y) {
-    Y_size index;
+    Y_word index;
     for (index = 0; index < Y_Y_INST_SIZE; ++index) {
         if (y->reg[yr_rey] == (Y_word) y->x_map[index]) {
             y->reg[yr_pc] = index;
@@ -626,7 +637,7 @@ void y86_output_reg(Y_data *y) {
 }
 
 void y86_output_mem(Y_data *y) {
-    Y_size index;
+    Y_word index;
 
     fprintf(stdout, "Changes to memory:\n");
     for (index = 0; index < Y_MEM_SIZE; ++index) {
@@ -661,8 +672,7 @@ Y_stat f_main(Y_char *fname, Y_word step) {
         // Load
         if (strcmp(fname, "nil")) {
             y86_load_file(y, fname);
-            y86_load_reset(y);
-            y86_load(y);
+            y86_load_all(y);
         }
 
         // Exec
