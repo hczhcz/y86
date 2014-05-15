@@ -95,6 +95,12 @@ void y86_gen_protect(Y_data *y) {
     y86_gen_after(y);
 }
 
+void y86_gen_interrupt(Y_data *y, Y_stat stat) {
+    y86_gen_stat(y, stat);
+    y86_gen_after(y);
+    y86_gen_before(y);
+}
+
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
     // y86_gen_before(y);
 
@@ -428,14 +434,14 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
 
         // Build callback stack
         "addl $12, %%esp" "\n\t"
-        "pushl $y86_call" "\n\t"
+        "pushl $y86_check" "\n\t"
         "movd %%esp, %%mm2" "\n\t"
 
         "subl $8, %%esp" "\n\t"
         "popfd" "\n\t"
 
-        // Call
-        "y86_call:" "\n\t"
+    // Checking before calling
+    "y86_check:" "\n\t"
 
         "pushfd" "\n\t"
         "movd %%eax, %%mm3" "\n\t"
@@ -444,21 +450,56 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         "movd %%mm6, %%eax" "\n\t"
         "decl %%eax" "\n\t"
         "movd %%eax, %%mm6" "\n\t"
-        "testl %%eax, %%eax" "\n\t"
+        // "testl %%eax, %%eax" "\n\t"
         "js y86_fin" "\n\t"
 
         // Check state
         "movd %%mm7, %%eax" "\n\t"
         "testl %%eax, %%eax" "\n\t"
-        "jnz y86_fin" "\n\t"
+        "jnz y86_int" "\n\t"
+
+    // Call the function
+    "y86_call:" "\n\t"
 
         "movd %%mm3, %%eax" "\n\t"
         "popfd" "\n\t"
 
         "ret" "\n\t"
 
-        // Finished
-        "y86_fin:" "\n\t"
+    // Handling interrupt etc.
+    "y86_int:" "\n\t"
+
+        // Check ys_mir and ys_miw // TODO: update
+        "cmpl $8, %%eax" "\n\t"
+        "jl y86_fin" "\n\t"
+
+        "movd %%mm4, %%eax" "\n\t"
+
+        // if mm4 < inst_size, rebuild x inst
+        "andl $" Y_MASK_NOT_INST ", %%eax" "\n\t"
+        "jz y86_nca" "\n\t"
+
+        // if mm4 >= mem_size, let it finish (adr error)
+        "addl $3, %%eax" "\n\t" // Give space to 32 bits
+        "andl $" Y_MASK_NOT_MEM ", %%eax" "\n\t"
+        "jnz y86_fin" "\n\t"
+
+        // Write data
+        "movd %%mm4, %%eax" "\n\t"
+        "movd %%mm5, -8288(%%esp, %%eax)" "\n\t" // 8288 = reg: 32 + bak_reg: 64 + mem: 8192
+        "jmp y86_call" "\n\t"
+
+    // Handling ys_nca
+    "y86_nca:" "\n\t" //?????
+
+        // Write data
+        "movd %%mm4, %%eax" "\n\t"
+        "movd %%mm5, -8288(%%esp, %%eax)" "\n\t" // 8288 = reg: 32 + bak_reg: 64 + mem: 8192
+
+
+
+    // Finished
+    "y86_fin:" "\n\t"
 
         "movd %%mm3, %%eax" "\n\t"
 
@@ -511,12 +552,12 @@ void y86_output_error(Y_data *y) {
         case ys_inp:
             fprintf(stdout, "PC = 0x%x, Invalid instruction detected staticly\n", y->reg[yr_pc]);
             break;
-        case ys_mir:
+        /*case ys_mir:
             fprintf(stdout, "PC = 0x%x, Invalid instruction address on read\n", y->reg[yr_pc]);
             break;
         case ys_miw:
             fprintf(stdout, "PC = 0x%x, Invalid instruction address on write\n", y->reg[yr_pc]);
-            break;
+            break;*/
         default:
             break;
     }
@@ -527,8 +568,8 @@ Y_word y86_cc_transform(Y_word cc_x) {
 }
 
 void y86_output_state(Y_data *y) {
-    const Y_char *stat_names[10] = {
-        "AOK", "HLT", "ADR", "INS", "", "", "ADR", "INS", "ADR", "ADR"
+    const Y_char *stat_names[8] = {
+        "AOK", "HLT", "ADR", "INS", "", "", "ADR", "INS"
     };
 
     const Y_char *cc_names[8] = {

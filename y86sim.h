@@ -5,6 +5,7 @@
 
 #define HIGH(pack) ((pack) >> 4 & 0xF)
 #define LOW(pack) ((pack) & 0xF)
+#define STR(data) #data
 
 #define Y_MEM_SIZE 0x2000
 #define Y_X_INST_SIZE 0x1000
@@ -45,9 +46,12 @@ typedef enum {
     ys_ccf = 0x5, // Non-standard: Compiler, error
     ys_adp = 0x6, // Non-standard: ADR error caused by mem protection
     ys_inp = 0x7, // Non-standard: INS error caused by mem protection
-    ys_mir = 0x8, // Non-standard: Memory read interrupt, for range checking
-    ys_miw = 0x9  // Non-standard: Memory write interrupt, for range checking
+    ys_mia = 0x8, // Non-standard: Memory access interrupt, range checking
+    ys_mim = 0x9, // Non-standard: Memory changed interrupt, check if instruction changed
+    ys_mij = 0xA  // Non-standard: Memory raw jump interrupt, map to x_inst
 } Y_stat;
+
+const Y_stat ys_cnt = 0x8; // Normal stat if below
 
 typedef enum {
     yr_edi = 0x0,
@@ -73,7 +77,7 @@ typedef enum {
 // MM2: Mid ESP
 // MM3: Temp
 // MM4: Mem pointer
-// MM5: Mem value
+// MM5: ???
 
 
 const Y_reg yr_cnt = 0x08; // Counting, not a register
