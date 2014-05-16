@@ -160,6 +160,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
                         break;
                     default:
                         // Impossible
+                        fprintf(stderr, "Internal bug!\n");
+                        longjmp(y->jmp, ys_ccf);
                         break;
                 }
             } else {
@@ -222,6 +224,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
                         break;
                     default:
                         // Impossible
+                        fprintf(stderr, "Internal bug!\n");
+                        longjmp(y->jmp, ys_ccf);
                         break;
                 }
             } else {
@@ -260,6 +264,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
                             break;
                         default:
                             // Impossible
+                            fprintf(stderr, "Internal bug!\n");
+                            longjmp(y->jmp, ys_ccf);
                             break;
                     }
                     y86_gen_after_goto(y, y->x_map[val]);
@@ -324,6 +330,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             break;
         default:
             // Impossible
+            fprintf(stderr, "Internal bug!\n");
+            longjmp(y->jmp, ys_ccf);
             break;
     }
 }
@@ -341,6 +349,7 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
         case yi_nop:
         case yi_ret:
             break;
+
         case yi_rrmovl:
         case yi_cmovle:
         case yi_cmovl:
@@ -361,6 +370,7 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
             (*inst)++;
 
             break;
+
         case yi_irmovl:
         case yi_rmmovl:
         case yi_mrmovl:
@@ -376,6 +386,7 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
             *inst += sizeof(Y_word);
 
             break;
+
         case yi_jmp:
         case yi_jle:
         case yi_jl:
@@ -390,6 +401,7 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
             *inst += sizeof(Y_word);
 
             break;
+
         case yi_bad:
         default:
             op = yi_bad;
