@@ -98,7 +98,7 @@ Y_char y86_x_regbyte_8(Y_reg ra, Y_reg rb) {
 
 void y86_gen_protect(Y_data *y) {
     y86_gen_before(y);
-    y86_gen_stat(y, ys_inp); // TODO: hlt?
+    y86_gen_stat(y, ys_hlt);
     y86_gen_after(y);
     y86_gen_check(y);
 }
@@ -110,6 +110,11 @@ void y86_gen_interrupt_ready(Y_data *y, Y_stat stat) {
 
 void y86_gen_interrupt_go(Y_data *y) {
     YX(0x0F) YX(0x6E) YX(0xE4) // movd %esp, %mm4
+    y86_gen_check(y);
+    y86_gen_before(y);
+}
+
+void y86_gen_interrupt_go_again(Y_data *y) {
     y86_gen_check(y);
     y86_gen_before(y);
 }
@@ -171,15 +176,15 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
         case yi_rmmovl:
             if (ra < yr_cnt && rb < yr_cnt) {
                 y86_gen_interrupt_ready(y, ys_ima);
-                // TODO addr, put something in esp -> mm4
+                YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), $esp
+                YXW(val)
                 y86_gen_interrupt_go(y);
 
                 YX(0x89) YX(y86_x_regbyte_8(ra, rb)) // movl ...
                 YXW(val + (Y_word) &(y->mem[0]))
 
                 y86_gen_interrupt_ready(y, ys_imc);
-                // TODO addr
-                y86_gen_interrupt_go(y);
+                y86_gen_interrupt_go_again(y);
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -187,7 +192,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
         case yi_mrmovl:
             if (ra < yr_cnt && rb < yr_cnt) {
                 y86_gen_interrupt_ready(y, ys_ima);
-                // TODO addr
+                YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), $esp
+                YXW(val)
                 y86_gen_interrupt_go(y);
 
                 YX(0x8B) YX(y86_x_regbyte_8(ra, rb)) // movl ...
@@ -268,14 +274,13 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             if (val >= 0 && val < Y_Y_INST_SIZE) {
                 if (y->x_map[val]) {
                     y86_gen_interrupt_ready(y, ys_ima);
-                    // TODO esp -= 4
+                    YX(0x83) YX(0xEC) YX(0x04) // subl $4, %esp
                     y86_gen_interrupt_go(y);
 
-                    // TODO push y->reg[yr_pc] + 1
+                    YX(0x68) YXW(y->reg[yr_pc] + 5) // push %pc+$5
 
                     y86_gen_interrupt_ready(y, ys_imc);
-                    // Just keep esp
-                    y86_gen_interrupt_go(y);
+                    y86_gen_interrupt_go_again(y);
 
                     y86_gen_after_goto(y, y->x_map[val]);
                 } else {
@@ -290,22 +295,29 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
 
             break;
         case yi_pushl:
-            y86_gen_interrupt_ready(y, ys_ima);
-            // TODO esp -= 4
-            y86_gen_interrupt_go(y);
+            if (ra < yr_cnt && rb == yr_nil) {
+                y86_gen_interrupt_ready(y, ys_ima);
+                YX(0x83) YX(0xEC) YX(0x04) // subl $4, %esp
+                y86_gen_interrupt_go(y);
 
-            // TODO push
+                YX(0x50 + ra) // push ...
 
-            y86_gen_interrupt_ready(y, ys_imc);
-            // Just keep esp
-            y86_gen_interrupt_go(y);
+                y86_gen_interrupt_ready(y, ys_imc);
+                y86_gen_interrupt_go_again(y);
+            } else {
+                y86_gen_stat(y, ys_ins);
+            }
             break;
         case yi_popl:
-            y86_gen_interrupt_ready(y, ys_ima);
-            // Just keep esp
-            y86_gen_interrupt_go(y);
+            if (ra < yr_cnt && rb == yr_nil) {
+                y86_gen_interrupt_ready(y, ys_ima);
+                // Just keep esp
+                y86_gen_interrupt_go(y);
 
-            // TODO pop
+                YX(0x58 + ra) // pop ...
+            } else {
+                y86_gen_stat(y, ys_ins);
+            }
             break;
         case yi_bad:
             y86_gen_stat(y, ys_ins);
@@ -523,34 +535,27 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
     // Handling interrupt etc.
     "y86_int:" "\n\t"
 
-        // Check ys_mir and ys_miw // TODO: update
+        // If stat < 8, just finished
         "cmpl $8, %%eax" "\n\t"
         "jl y86_fin" "\n\t"
 
+        // If stat == 10 (ys_ret), handle by outer
+        "cmpl $10, %%eax" "\n\t"
+        "je y86_fin" "\n\t"
+
+        // If stat == 8 (ys_ima) or 9 (ys_imc), do adr checking
         "movd %%mm4, %%eax" "\n\t"
 
-        // if mm4 < inst_size, rebuild x inst
+        // If mm4 < inst_size, handle by outer
         "andl $" Y_MASK_NOT_INST ", %%eax" "\n\t"
-        "jz y86_nca" "\n\t"
+        "jz y86_fin" "\n\t"
 
-        // if mm4 >= mem_size, let it finish (adr error)
+        // If mm4 + 3 < mem_size, safe, else adr error
         "addl $3, %%eax" "\n\t" // Give space to 32 bits
         "andl $" Y_MASK_NOT_MEM ", %%eax" "\n\t"
-        "jnz y86_fin" "\n\t"
+        "jnz y86_call" "\n\t"
 
-        // Write data
-        "movd %%mm4, %%eax" "\n\t"
-        "movd %%mm5, -8288(%%esp, %%eax)" "\n\t" // 8288 = reg: 32 + bak_reg: 64 + mem: 8192
-        "jmp y86_call" "\n\t"
-
-    // Handling ys_nca
-    "y86_nca:" "\n\t" //?????
-
-        // Write data
-        "movd %%mm4, %%eax" "\n\t"
-        "movd %%mm5, -8288(%%esp, %%eax)" "\n\t" // 8288 = reg: 32 + bak_reg: 64 + mem: 8192
-
-
+        "movd y_static_num+2, %%mm7" "\n\t" // ys_adr == 2
 
     // Finished
     "y86_fin:" "\n\t"
