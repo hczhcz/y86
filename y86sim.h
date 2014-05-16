@@ -5,7 +5,8 @@
 
 #define HIGH(pack) ((pack) >> 4 & 0xF)
 #define LOW(pack) ((pack) & 0xF)
-#define STR(data) #data
+#define IO_WORD(data) (*(Y_word *) (data))
+#define IO_ADDR(data) (*(Y_addr *) (data))
 
 #define Y_MEM_SIZE 0x2000
 #define Y_X_INST_SIZE 0x2000

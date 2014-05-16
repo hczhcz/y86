@@ -31,7 +31,7 @@ void y86_push_x(Y_data *y, Y_char value) {
 
 void y86_push_x_word(Y_data *y, Y_word value) {
     if (y->x_end + sizeof(Y_word) <= &(y->x_inst[Y_X_INST_SIZE])) {
-        *((Y_word *) y->x_end) = value;
+        IO_WORD(y->x_end) = value;
         y->x_end += sizeof(Y_word);
     } else {
         fprintf(stderr, "Too large compiled instruction size (word: 0x%x)\n", value);
@@ -41,7 +41,7 @@ void y86_push_x_word(Y_data *y, Y_word value) {
 
 void y86_push_x_addr(Y_data *y, Y_addr value) {
     if (y->x_end + sizeof(Y_addr) <= &(y->x_inst[Y_X_INST_SIZE])) {
-        *((Y_addr *) y->x_end) = value;
+        IO_ADDR(y->x_end) = value;
         y->x_end += sizeof(Y_addr);
     } else {
         fprintf(stderr, "Too large compiled instruction size (addr: 0x%x)\n", (Y_word) value);
@@ -114,11 +114,6 @@ void y86_gen_interrupt_go(Y_data *y) {
     y86_gen_before(y);
 }
 
-void y86_gen_interrupt_go_again(Y_data *y) {
-    y86_gen_check(y);
-    y86_gen_before(y);
-}
-
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
     // Always: ra, rb >= 0
     switch (op) {
@@ -185,8 +180,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
                 YX(0x89) YX(y86_x_regbyte_8(ra, rb)) // movl ...
                 YXW(val + (Y_word) &(y->mem[0]))
 
-                y86_gen_interrupt_ready(y, ys_imc);
-                y86_gen_interrupt_go_again(y);
+                y86_gen_stat(y, ys_imc);
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -285,8 +279,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
 
                     YX(0x68) YXW(y->reg[yr_pc] + 5) // push %pc+$5
 
-                    y86_gen_interrupt_ready(y, ys_imc);
-                    y86_gen_interrupt_go_again(y);
+                    y86_gen_stat(y, ys_imc);
 
                     y86_gen_after_goto(y, y->x_map[val]);
                 } else {
@@ -308,8 +301,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
 
                 YX(0x50 + ra) // push ...
 
-                y86_gen_interrupt_ready(y, ys_imc);
-                y86_gen_interrupt_go_again(y);
+                y86_gen_stat(y, ys_imc);
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -382,7 +374,7 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
 
             // Read value
             if (*inst + sizeof(Y_word) > end) op = yi_bad;
-            val = *((Y_word *) *inst);
+            val = IO_WORD(*inst);
             *inst += sizeof(Y_word);
 
             break;
@@ -397,7 +389,7 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
         case yi_call:
             // Read value
             if (*inst + sizeof(Y_word) > end) op = yi_bad;
-            val = *((Y_word *) *inst);
+            val = IO_WORD(*inst);
             *inst += sizeof(Y_word);
 
             break;
@@ -543,15 +535,16 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
 
         "ret" "\n\t"
 
+    ".align 4" "\n\t"
+
     "y_st_jump:" "\n\t"
-        ".align 4" "\n\t"
         // If stat == 8 (ys_ima), do mem adr checking
         ".long y86_int_ima" "\n\t"
         // If stat == 9 (ys_imc), do inst adr checking
         ".long y86_int_imc" "\n\t"
         // If stat == 10 (ys_ret), handle by outer
-        ".long y86_fin" "\n\t"
-        ".align 16, 0x90" "\n\t"
+
+    ".align 16, 0x90" "\n\t"
 
     // Handling interrupt etc.
     "y86_int:" "\n\t"
@@ -622,7 +615,8 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
 
             y->reg[yr_st] = ys_aok;
 
-            //y86_exec(y);
+
+            y86_exec(y);
             break;
 
         case ys_ret:
@@ -739,9 +733,9 @@ void y86_output_mem(Y_data *y) {
     Y_word index;
 
     fprintf(stdout, "Changes to memory:\n");
-    for (index = 0; index < Y_MEM_SIZE; ++index) {
-        if (y->mem[index] != y->bak_mem[index]) {
-            fprintf(stdout, "0x%.4x:\t0x%.8x\t0x%.8x\n", index, y->bak_mem[index], y->mem[index]);
+    for (index = 0; index < Y_MEM_SIZE; index += 4) { // Y_MEM_SIZE = 4 * n
+        if (IO_WORD(&(y->bak_mem[index])) != IO_WORD(&(y->mem[index]))) {
+            fprintf(stdout, "0x%.4x:\t0x%.8x\t0x%.8x\n", index, IO_WORD(&(y->bak_mem[index])), IO_WORD(&(y->mem[index])));
         }
     }
 }
