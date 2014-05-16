@@ -89,11 +89,11 @@ void y86_gen_raw_jmp(Y_data *y, Y_addr value) {
 }
 
 Y_char y86_x_regbyte_C(Y_reg ra, Y_reg rb) {
-    return 0xC0 | (ra >> 3) | rb;
+    return 0xC0 | (ra << 3) | rb;
 }
 
 Y_char y86_x_regbyte_8(Y_reg ra, Y_reg rb) {
-    return 0x80 | (ra >> 3) | rb;
+    return 0x80 | (ra << 3) | rb;
 }
 
 void y86_gen_protect(Y_data *y) {
@@ -512,17 +512,16 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         "pushfd" "\n\t"
         "movd %%eax, %%mm3" "\n\t"
 
-        // Check step
-        "movd %%mm6, %%eax" "\n\t"
-        "decl %%eax" "\n\t"
-        "movd %%eax, %%mm6" "\n\t"
-        // "testl %%eax, %%eax" "\n\t"
-        "js y86_fin" "\n\t"
-
         // Check state
         "movd %%mm7, %%eax" "\n\t"
         "testl %%eax, %%eax" "\n\t"
         "jnz y86_int" "\n\t"
+
+        // Check step
+        "movd %%mm6, %%eax" "\n\t"
+        "decl %%eax" "\n\t"
+        "movd %%eax, %%mm6" "\n\t"
+        "js y86_fin" "\n\t"
 
     // Call the function
     "y86_call:" "\n\t"
@@ -532,30 +531,53 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
 
         "ret" "\n\t"
 
+    "y_st_jump:" "\n\t"
+        ".align 4" "\n\t"
+        // If stat == 8 (ys_ima), do mem adr checking
+        ".long y86_int_ima" "\n\t"
+        // If stat == 9 (ys_imc), do inst adr checking
+        ".long y86_int_imc" "\n\t"
+        // If stat == 10 (ys_ret), handle by outer
+        ".long y86_fin" "\n\t"
+        ".align 16, 0x90" "\n\t"
+
     // Handling interrupt etc.
     "y86_int:" "\n\t"
 
         // If stat < 8, just finished
-        "cmpl $8, %%eax" "\n\t"
-        "jl y86_fin" "\n\t"
+        "subl $8, %%eax" "\n\t"
+        "js y86_int_brk" "\n\t"
 
-        // If stat == 10 (ys_ret), handle by outer
-        "cmpl $10, %%eax" "\n\t"
-        "je y86_fin" "\n\t"
+        "leal y_st_jump(, %%eax, 4), %%eax" "\n\t"
+        "jmpl *(%%eax)" "\n\t"
 
-        // If stat == 8 (ys_ima) or 9 (ys_imc), do adr checking
-        "movd %%mm4, %%eax" "\n\t"
+        "y86_int_ima:" "\n\t"
 
-        // If mm4 < inst_size, handle by outer
-        "andl $" Y_MASK_NOT_INST ", %%eax" "\n\t"
-        "jz y86_fin" "\n\t"
+            // If mm4 + 3 < mem_size, safe, else adr error
+            "movd %%mm4, %%eax" "\n\t"
 
-        // If mm4 + 3 < mem_size, safe, else adr error
-        "addl $3, %%eax" "\n\t" // Give space to 32 bits
-        "andl $" Y_MASK_NOT_MEM ", %%eax" "\n\t"
-        "jnz y86_call" "\n\t"
+            "addl $3, %%eax" "\n\t" // Give space to 32 bits
+            "andl $" Y_MASK_NOT_MEM ", %%eax" "\n\t"
+            "jz y86_call" "\n\t"
 
-        "movd y_static_num+2, %%mm7" "\n\t" // ys_adr == 2
+            "movd y_static_num+8, %%mm7" "\n\t" // Set stat = 2 (ys_adr)
+            "jmp y86_fin" "\n\t"
+
+        "y86_int_imc:" "\n\t"
+
+            // If mm4 < inst_size, handle by outer
+            "movd %%mm4, %%eax" "\n\t"
+
+            "andl $" Y_MASK_NOT_INST ", %%eax" "\n\t"
+            "jnz y86_call" "\n\t"
+
+            "jmp y86_fin" "\n\t"
+
+        "y86_int_brk:" "\n\t"
+
+            "movd %%mm6, %%eax" "\n\t"
+            "decl %%eax" "\n\t"
+            "movd %%eax, %%mm6" "\n\t"
 
     // Finished
     "y86_fin:" "\n\t"
