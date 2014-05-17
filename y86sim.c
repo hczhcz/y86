@@ -489,7 +489,7 @@ void y86_trace_ip(Y_data *y) {
 }
 
 void __attribute__ ((noinline)) y86_exec(Y_data *y) {
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         "pushal" "\n\t"
         "pushfd" "\n\t"
 
@@ -543,6 +543,7 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         // If stat == 9 (ys_imc), do inst adr checking
         ".long y86_int_imc" "\n\t"
         // If stat == 10 (ys_ret), handle by outer
+        ".long y86_int_brk" "\n\t"
 
     ".align 16, 0x90" "\n\t"
 
@@ -602,37 +603,6 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         :
         : "r" (&y->reg[0])
     );
-
-    switch (y->reg[yr_st]) {
-        case ys_ima:
-            // Already became adr error, never reach here
-            fprintf(stderr, "Internal bug!\n");
-            longjmp(y->jmp, ys_ccf);
-            break;
-
-        case ys_imc:
-            // TODO: checking
-
-            y->reg[yr_st] = ys_aok;
-
-
-            y86_exec(y);
-            break;
-
-        case ys_ret:
-            // TODO: checking
-
-            // Do return
-            y->reg[yr_pc] = y->mem[y->reg[yr_esp]];
-            y->reg[yr_esp] += 4;
-
-            y->reg[yr_st] = ys_aok;
-
-            y86_exec(y);
-            break;
-        default:
-            break;
-    }
 }
 
 void y86_trace_pc(Y_data *y) {
@@ -649,11 +619,58 @@ void y86_trace_pc(Y_data *y) {
     }
 }
 
+Y_word y86_get_im_ptr() {
+    Y_word result;
+    __asm__("movd %%mm4, %0": "=r" (result));
+    return result;
+}
+
 void y86_go(Y_data *y, Y_word step) {
+    Y_word goon = 0;
+
     y86_ready(y, step);
-    y86_trace_ip(y);
-    y86_exec(y);
-    y86_trace_pc(y);
+
+    do {
+        y86_trace_ip(y);
+        y86_exec(y);
+        y86_trace_pc(y);
+
+        switch (y->reg[yr_st]) {
+            case ys_ima:
+                // Already became adr error, never reach here
+                fprintf(stderr, "Internal bug!\n");
+                longjmp(y->jmp, ys_ccf);
+                break;
+
+            case ys_imc:
+                // TODO: checking
+                if (y86_get_im_ptr() + 4 < y->reg[yr_len]) {
+                    y->reg[yr_len] = y86_get_im_ptr() + 4;
+                }
+                y86_load_all(y);
+
+                y->reg[yr_st] = ys_aok;
+
+                goon = 1;
+                break;
+
+            case ys_ret:
+                // TODO: checking
+
+                // Do return
+                y->reg[yr_pc] = y->mem[y->reg[yr_esp]];
+                y->reg[yr_esp] += 4;
+
+                y->reg[yr_st] = ys_aok;
+
+                goon = 1;
+                break;
+
+            default:
+                goon = 0;
+                break;
+        }
+    } while (goon);
 }
 
 void y86_output_error(Y_data *y) {
