@@ -332,8 +332,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
     }
 }
 
-void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
-    Y_inst op = **inst;
+void y86_parse(Y_data *y, Y_char **inst, Y_char *end) {
+    Y_inst op = **inst & 0xFF;
     (*inst)++;
 
     Y_reg_id ra = yr_nil;
@@ -417,28 +417,34 @@ void y86_load_reset(Y_data *y) {
 }
 
 void y86_load(Y_data *y, Y_char *begin) {
-    Y_char *inst;
+    Y_char *inst = begin;
     Y_char *end = &(y->mem[y->reg[yr_len]]);
 
     Y_word pc = y->reg[yr_pc];
 
-    for (inst = begin; inst != end;) {
-        y->reg[yr_pc] = inst - begin;
+    while (inst != end) {
+        while (inst != end) {
+            y->reg[yr_pc] = inst - begin;
 
-        if (y->x_map[y->reg[yr_pc]]) {
-            y86_gen_raw_jmp(y, y->x_map[y->reg[yr_pc]]);
-        } else {
-            y86_link_x_map(y, y->reg[yr_pc]);
+            if (y->x_map[y->reg[yr_pc]]) {
+                y86_gen_raw_jmp(y, y->x_map[y->reg[yr_pc]]);
+            } else {
+                y86_link_x_map(y, y->reg[yr_pc]);
 
-            y86_gen_before(y);
-            y86_parse(y, begin, &inst, end);
-            y86_gen_after(y);
-            y86_gen_check(y);
+                y86_gen_before(y);
+                y86_parse(y, &inst, end);
+                y86_gen_after(y);
+                y86_gen_check(y);
+            }
         }
-    }
 
-    y86_link_x_map(y, y->reg[yr_pc] + 1);
-    y86_gen_protect(y);
+        for (inst = begin; inst != end; ++inst) {
+            if (y->x_map[inst - begin] == (Y_addr) -1) break;
+        }
+
+        y86_link_x_map(y, y->reg[yr_pc] + 1);
+        y86_gen_protect(y);
+    };
 
     y->reg[yr_pc] = pc;
 }
