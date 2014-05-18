@@ -173,13 +173,13 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
         case yi_rmmovl:
             if (ra < yr_cnt && rb < yr_cnt) {
                 y86_gen_interrupt_ready(y, ys_ima);
-                YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), $esp
-                if (rb == yri_ebx) YX(0x24) // ???
+                YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), %esp
+                if (rb == yri_ebx) YX(0x24) // Extra byte for %ebx
                 YXW(val)
                 y86_gen_interrupt_go(y);
 
                 YX(0x89) YX(y86_x_regbyte_8(ra, rb)) // movl ...
-                if (rb == yri_ebx) YX(0x24) // ???
+                if (rb == yri_ebx) YX(0x24) // Extra byte for %ebx
                 YXW(val + (Y_word) &(y->mem[0]))
 
                 y86_gen_stat(y, ys_imc);
@@ -190,8 +190,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
         case yi_mrmovl:
             if (ra < yr_cnt && rb < yr_cnt) {
                 y86_gen_interrupt_ready(y, ys_ima);
-                YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), $esp
-                if (rb == yri_ebx) YX(0x24) // ???
+                YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), %esp
+                if (rb == yri_ebx) YX(0x24) // Extra byte for %ebx
                 YXW(val)
                 y86_gen_interrupt_go(y);
 
@@ -565,7 +565,7 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         // If stat == 9 (ys_imc), do inst adr checking
         ".long y86_int_imc" "\n\t"
         // If stat == 10 (ys_ret), handle by outer
-        ".long y86_int_brk" "\n\t"
+        ".long y86_fin" "\n\t"
 
     ".align 16, 0x90" "\n\t"
 
@@ -683,8 +683,17 @@ void y86_go(Y_data *y, Y_word step) {
                 // TODO: checking
 
                 // Do return
-                y->reg[yr_pc] = y->mem[y->reg[yrl_esp]];
+                y->reg[yr_pc] = IO_WORD(&(y->mem[y->reg[yrl_esp]]));
                 y->reg[yrl_esp] += 4;
+
+                if (y->reg[yr_pc] >= y->reg[yr_len]) { // TODO: change this hack
+                    y->reg[yr_sc] -= 2;
+                    y->reg[yr_pc] += 1;
+
+                    y->reg[yr_st] = ys_hlt;
+                    goon = 0;
+                    break;
+                }
 
                 y->reg[yr_st] = ys_aok;
 
@@ -701,7 +710,7 @@ void y86_go(Y_data *y, Y_word step) {
 void y86_output_error(Y_data *y) {
     switch (y->reg[yr_st]) {
         case ys_adr:
-            if (y->mem[y->reg[yr_pc] - 1] >= 0 /*< yi_call*/) { // Evil hack !?
+            if (y->mem[y->reg[yr_pc] - 1] >= 0 /*< yi_call*/) { // Evil hack !? TODO
                 fprintf(stdout, "PC = 0x%x, Invalid data address 0x%x\n", y->reg[yr_pc] - 1, y86_get_im_ptr());
             } else {
                 fprintf(stdout, "PC = 0x%x, Invalid stack address 0x%x\n", y->reg[yr_pc] - 1, y86_get_im_ptr());
