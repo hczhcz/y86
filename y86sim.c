@@ -585,9 +585,10 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
             "movd %%mm4, %%eax" "\n\t"
 
             "andl $" Y_MASK_NOT_MEM ", %%eax" "\n\t"
-            "jz y86_call" "\n\t"
+            "jnz y86_fin" "\n\t"
 
-            "jmp y86_fin" "\n\t"
+            "movd %%eax, %%mm7" "\n\t" // Assert: eax is 0
+            "jmp y86_call" "\n\t"
 
         "y86_int_imc:" "\n\t"
 
@@ -657,6 +658,7 @@ void y86_go(Y_data *y, Y_word step) {
 
         switch (y->reg[yr_st]) {
             case ys_ima:
+                // Already failed
                 y->reg[yr_sc] -= 1;
                 y->reg[yr_pc] += 1;
 
@@ -718,7 +720,7 @@ void y86_output_error(Y_data *y) {
             fprintf(stdout, "PC = 0x%x, Invalid instruction address\n", y->reg[yr_pc] - 1);
             break;
         case ys_inp:
-            fprintf(stdout, "PC = 0x%x, Invalid instruction detected staticly\n", y->reg[yr_pc] - 1);
+            fprintf(stdout, "PC = 0x%x, Invalid instruction address\n", y->reg[yr_pc] - 1);
             break;
         /*case ys_mir:
             fprintf(stdout, "PC = 0x%x, Invalid instruction address on read\n", y->reg[yr_pc] - 1);
