@@ -277,17 +277,23 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
         case yi_call:
             if (val >= 0 && val < Y_Y_INST_SIZE) {
                 if (y->x_map[val]) {
+                    // YX(0x83) YX(0xEC) YX(0x04) // subl $4, %esp
+                    YX(0x8D) YX(0x64) YX(0x24) YX(0xFC) // leal -4(%esp), %esp
+
                     y86_gen_interrupt_ready(y, ys_ima);
-                    YX(0x83) YX(0xEC) YX(0x04) // subl $4, %esp
                     y86_gen_interrupt_go(y);
 
-                    YX(0x68) YXW(y->reg[yr_pc] + 5) // push %pc+$5
+                    // YX(0x81) YX(0xC4) YXA(&(y->mem[0]) + 4) // addl offset+4, %esp
+                    YX(0x8D) YX(0xA4) YX(0x24) YXW(4 + (Y_word) &(y->mem[0])) // leal offset+4(%esp), %esp
+                    YX(0x68) YX(y->reg[yr_pc] + 5) // push %pc+5
+                    // YX(0x81) YX(0xEC) YXA(&(y->mem[0])) // subl offset, %esp
+                    YX(0x8D) YX(0xA4) YX(0x24) YXW(0 - (Y_word) &(y->mem[0])) // leal -offset(%esp), %esp
 
                     y86_gen_stat(y, ys_imc);
 
                     y86_gen_after_goto(y, y->x_map[val]);
                 } else {
-                    y86_gen_stat(y, ys_inp); // TODO: use load()
+                    y86_gen_stat(y, ys_inp); // TODO: use load() // TODO: add ys_ima checking?
                 }
             } else {
                 y86_gen_stat(y, ys_adp);
@@ -299,11 +305,14 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             break;
         case yi_pushl:
             if (ra < yr_cnt && rb == yr_nil) {
+                // YX(0x83) YX(0xEC) YX(0x04) // subl $4, %esp
+                YX(0x8D) YX(0x64) YX(0x24) YX(0xFC) // leal -4(%esp), %esp
+
                 y86_gen_interrupt_ready(y, ys_ima);
-                YX(0x83) YX(0xEC) YX(0x04) // subl $4, %esp
                 y86_gen_interrupt_go(y);
 
-                YX(0x50 + ra) // push ...
+                YX(0x89) YX(y86_x_regbyte_8(ra, yri_esp)) // movl %ra, (%esp)
+                YXW(val + (Y_word) &(y->mem[0]))
 
                 y86_gen_stat(y, ys_imc);
             } else {
@@ -313,10 +322,13 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
         case yi_popl:
             if (ra < yr_cnt && rb == yr_nil) {
                 y86_gen_interrupt_ready(y, ys_ima);
-                // Just keep esp
                 y86_gen_interrupt_go(y);
 
-                YX(0x58 + ra) // pop ...
+                YX(0x8B) YX(y86_x_regbyte_8(ra, yri_esp)) // movl (%esp), $ra
+                YXW(val + (Y_word) &(y->mem[0]))
+
+                // YX(0x83) YX(0xC4) YX(0x04) // addl $4, %esp
+                YX(0x8D) YX(0x64) YX(0x24) YX(0x04) // leal 4(%esp), %esp
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -687,7 +699,11 @@ void y86_go(Y_data *y, Y_word step) {
 void y86_output_error(Y_data *y) {
     switch (y->reg[yr_st]) {
         case ys_adr:
-            fprintf(stdout, "PC = 0x%x, Invalid data address 0x%x\n", y->reg[yr_pc] - 1, y86_get_im_ptr()); // Evil hack !?
+            if (y->mem[y->reg[yr_pc] - 1] >= 0 /*< yi_call*/) { // Evil hack !?
+                fprintf(stdout, "PC = 0x%x, Invalid data address 0x%x\n", y->reg[yr_pc] - 1, y86_get_im_ptr());
+            } else {
+                fprintf(stdout, "PC = 0x%x, Invalid stack address 0x%x\n", y->reg[yr_pc] - 1, y86_get_im_ptr());
+            }
             break;
         case ys_ins:
             fprintf(stdout, "PC = 0x%x, Invalid instruction %.2x\n", y->reg[yr_pc] - 1, y->mem[y->reg[yr_pc] - 1]);

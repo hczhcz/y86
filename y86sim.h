@@ -48,7 +48,7 @@ typedef enum {
     ys_inp = 0x7, // Non-standard: INS error caused by mem protection
     ys_ima = 0x8, // Non-standard: Memory access interrupt, range checking
     ys_imc = 0x9, // Non-standard: Memory changed interrupt, check if instruction changed, load if necessary
-    ys_ret = 0xA  // Non-standard: Ret interrupt, check and pop esp, map to x_inst, jump (and load if necessary)
+    ys_ret = 0xA  // Non-standard: Ret interrupt, check and pop, map to x_inst, jump (and load if necessary)
 } Y_stat;
 
 const Y_stat ys_cnt = 0x8; // Normal stat if below
