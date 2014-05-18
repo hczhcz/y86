@@ -566,11 +566,9 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
             // If mm4 + 3 < mem_size, safe, else adr error
             "movd %%mm4, %%eax" "\n\t"
 
-            "addl $3, %%eax" "\n\t" // Give space to 32 bits
             "andl $" Y_MASK_NOT_MEM ", %%eax" "\n\t"
             "jz y86_call" "\n\t"
 
-            "movd y_static_num+8, %%mm7" "\n\t" // Set stat = 2 (ys_adr)
             "jmp y86_fin" "\n\t"
 
         "y86_int_imc:" "\n\t"
@@ -637,13 +635,16 @@ void y86_go(Y_data *y, Y_word step) {
     do {
         y86_trace_ip(y);
         y86_exec(y);
-        y86_trace_pc(y);
+        if (y->reg[yr_st] != ys_ima) y86_trace_pc(y);
 
         switch (y->reg[yr_st]) {
             case ys_ima:
-                // Already became adr error, never reach here
-                fprintf(stderr, "Internal bug!\n");
-                longjmp(y->jmp, ys_ccf);
+                y->reg[yr_sc] -= 1;
+                y->reg[yr_pc] += 1;
+
+                y->reg[yr_st] = ys_adr;
+
+                goon = 0;
                 break;
 
             case ys_imc:
@@ -680,28 +681,28 @@ void y86_go(Y_data *y, Y_word step) {
 void y86_output_error(Y_data *y) {
     switch (y->reg[yr_st]) {
         case ys_adr:
-            fprintf(stdout, "PC = 0x%x, Invalid instruction address\n", y->reg[yr_pc]);
+            fprintf(stdout, "PC = 0x%x, Invalid data address 0x%x\n", y->reg[yr_pc] - 1, y86_get_im_ptr()); // Evil hack !?
             break;
         case ys_ins:
-            fprintf(stdout, "PC = 0x%x, Invalid instruction\n", y->reg[yr_pc]);
+            fprintf(stdout, "PC = 0x%x, Invalid instruction %.2x\n", y->reg[yr_pc] - 1, y->mem[y->reg[yr_pc] - 1]);
             break;
         case ys_clf:
-            fprintf(stdout, "PC = 0x%x, File loading failed\n", /*y->reg[yr_pc]*/ 0);
+            fprintf(stdout, "PC = 0x%x, File loading failed\n", /*y->reg[yr_pc] - 1*/ 0);
             break;
         case ys_ccf:
-            fprintf(stdout, "PC = 0x%x, Parsing or compiling failed\n", y->reg[yr_pc]);
+            fprintf(stdout, "PC = 0x%x, Parsing or compiling failed\n", y->reg[yr_pc] - 1);
             break;
         case ys_adp:
-            fprintf(stdout, "PC = 0x%x, Invalid instruction address detected staticly\n", y->reg[yr_pc]);
+            fprintf(stdout, "PC = 0x%x, Invalid instruction address\n", y->reg[yr_pc] - 1);
             break;
         case ys_inp:
-            fprintf(stdout, "PC = 0x%x, Invalid instruction detected staticly\n", y->reg[yr_pc]);
+            fprintf(stdout, "PC = 0x%x, Invalid instruction detected staticly\n", y->reg[yr_pc] - 1);
             break;
         /*case ys_mir:
-            fprintf(stdout, "PC = 0x%x, Invalid instruction address on read\n", y->reg[yr_pc]);
+            fprintf(stdout, "PC = 0x%x, Invalid instruction address on read\n", y->reg[yr_pc] - 1);
             break;
         case ys_miw:
-            fprintf(stdout, "PC = 0x%x, Invalid instruction address on write\n", y->reg[yr_pc]);
+            fprintf(stdout, "PC = 0x%x, Invalid instruction address on write\n", y->reg[yr_pc] - 1);
             break;*/
         default:
             break;

@@ -96,6 +96,7 @@ typedef enum {
 typedef struct {
     Y_char bak_mem[Y_MEM_SIZE];
     Y_char mem[Y_MEM_SIZE];
+    Y_word wasted; // For rmmovl
     Y_word bak_reg[yr_cn2];
     Y_word reg[yr_cn2];
     Y_char x_inst[Y_X_INST_SIZE];
