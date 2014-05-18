@@ -54,14 +54,14 @@ typedef enum {
 const Y_stat ys_cnt = 0x8; // Normal stat if below
 
 typedef enum {
-    yr_edi = 0x0,
-    yr_esi = 0x1,
-    yr_ebp = 0x2,
-    yr_esp = 0x3,
-    yr_ebx = 0x4,
-    yr_edx = 0x5,
-    yr_ecx = 0x6,
-    yr_eax = 0x7,
+    yrl_edi = 0x0,
+    yrl_esi = 0x1,
+    yrl_ebp = 0x2,
+    yrl_esp = 0x3,
+    yrl_ebx = 0x4,
+    yrl_edx = 0x5,
+    yrl_ecx = 0x6,
+    yrl_eax = 0x7,
     yr_cc  = 0x8, // Non-standard: Flags, ZF SF OF
     yr_rey = 0x9, // Non-standard: Y return address
     yr_rex = 0xA, // Non-standard: X return address
@@ -69,8 +69,22 @@ typedef enum {
     yr_len = 0xC, // Non-standard: Y inst size
     yr_sx  = 0xD, // Non-standard: Step max
     yr_sc  = 0xE, // Non-standard: MM6: Step counter (decrease)
-    yr_st  = 0xF  // Non-standard: MM7: Stat
-} Y_reg;
+    yr_st  = 0xF, // Non-standard: MM7: Stat
+    yr_cn2 = 0x10 // Register buffer length
+} Y_reg_lyt;
+
+typedef enum {
+    yri_edi = 0x0,
+    yri_esi = 0x1,
+    yri_ebp = 0x2,
+    yri_esp = 0x3,
+    yri_ebx = 0x4,
+    yri_edx = 0x5,
+    yri_ecx = 0x6,
+    yri_eax = 0x7,
+    yr_cnt  = 0x8, // Register counting
+    yr_nil  = 0xF  // Null
+} Y_reg_id;
 
 // MM0: X ESP
 // MM1: Y ESP
@@ -78,11 +92,6 @@ typedef enum {
 // MM3: Temp
 // MM4: Mem pointer, for ys_ima and ys_imc
 // MM5: ???
-
-
-const Y_reg yr_cnt = 0x08; // Counting, not a register
-const Y_reg yr_cn2 = 0x10; // Another counting
-const Y_reg yr_nil = 0x0f; // Null
 
 typedef struct {
     Y_char bak_mem[Y_MEM_SIZE];

@@ -88,11 +88,11 @@ void y86_gen_raw_jmp(Y_data *y, Y_addr value) {
     YX(0xFF) YX(0x25) YXA(value) // jmp *value
 }
 
-Y_char y86_x_regbyte_C(Y_reg ra, Y_reg rb) {
+Y_char y86_x_regbyte_C(Y_reg_id ra, Y_reg_id rb) {
     return 0xC0 | (ra << 3) | rb;
 }
 
-Y_char y86_x_regbyte_8(Y_reg ra, Y_reg rb) {
+Y_char y86_x_regbyte_8(Y_reg_id ra, Y_reg_id rb) {
     return 0x80 | (ra << 3) | rb;
 }
 
@@ -114,7 +114,7 @@ void y86_gen_interrupt_go(Y_data *y) {
     y86_gen_before(y);
 }
 
-void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
+void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
     // Always: ra, rb >= 0
     switch (op) {
         case yi_halt:
@@ -174,10 +174,12 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             if (ra < yr_cnt && rb < yr_cnt) {
                 y86_gen_interrupt_ready(y, ys_ima);
                 YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), $esp
+                if (rb == yri_ebx) YX(0x24) // ???
                 YXW(val)
                 y86_gen_interrupt_go(y);
 
                 YX(0x89) YX(y86_x_regbyte_8(ra, rb)) // movl ...
+                if (rb == yri_ebx) YX(0x24) // ???
                 YXW(val + (Y_word) &(y->mem[0]))
 
                 y86_gen_stat(y, ys_imc);
@@ -189,10 +191,12 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg ra, Y_reg rb, Y_word val) {
             if (ra < yr_cnt && rb < yr_cnt) {
                 y86_gen_interrupt_ready(y, ys_ima);
                 YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), $esp
+                if (rb == yri_ebx) YX(0x24) // ???
                 YXW(val)
                 y86_gen_interrupt_go(y);
 
                 YX(0x8B) YX(y86_x_regbyte_8(ra, rb)) // movl ...
+                if (rb == yri_ebx) YX(0x24) // ???
                 YXW(val + (Y_word) &(y->mem[0]))
             } else {
                 y86_gen_stat(y, ys_ins);
@@ -332,8 +336,8 @@ void y86_parse(Y_data *y, Y_char *begin, Y_char **inst, Y_char *end) {
     Y_inst op = **inst;
     (*inst)++;
 
-    Y_reg ra = yr_nil;
-    Y_reg rb = yr_nil;
+    Y_reg_id ra = yr_nil;
+    Y_reg_id rb = yr_nil;
     Y_word val = 0;
 
     switch (op) {
@@ -658,8 +662,8 @@ void y86_go(Y_data *y, Y_word step) {
                 // TODO: checking
 
                 // Do return
-                y->reg[yr_pc] = y->mem[y->reg[yr_esp]];
-                y->reg[yr_esp] += 4;
+                y->reg[yr_pc] = y->mem[y->reg[yrl_esp]];
+                y->reg[yrl_esp] += 4;
 
                 y->reg[yr_st] = ys_aok;
 
@@ -732,7 +736,7 @@ void y86_output_state(Y_data *y) {
 }
 
 void y86_output_reg(Y_data *y) {
-    Y_reg index;
+    Y_reg_lyt index;
 
     const Y_char *reg_names[yr_cnt] = {
         "%edi", "%esi", "%ebp", "%esp", "%ebx", "%edx", "%ecx", "%eax"
