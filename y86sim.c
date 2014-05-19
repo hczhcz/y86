@@ -546,6 +546,7 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         "testl %%eax, %%eax" "\n\t"
         "jnz y86_int" "\n\t"
 
+    "y86_check_2:" "\n\t"
         // Check step
         "movd %%mm6, %%eax" "\n\t"
         "decl %%eax" "\n\t"
@@ -588,8 +589,9 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
             "movd %%mm4, %%eax" "\n\t"
 
             "andl $" Y_MASK_NOT_MEM ", %%eax" "\n\t"
-            "jnz y86_fin" "\n\t"
+            "jnz y86_int_brk" "\n\t"
 
+            "xorl %%eax, %%eax" "\n\t"
             "movd %%eax, %%mm7" "\n\t" // Assert: eax is 0
             "jmp y86_call" "\n\t"
 
@@ -599,7 +601,7 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
             "movd %%mm4, %%eax" "\n\t"
 
             "andl $" Y_MASK_NOT_INST ", %%eax" "\n\t"
-            "jnz y86_call" "\n\t"
+            "jnz y86_check_2" "\n\t"
 
             "jmp y86_fin" "\n\t"
 
@@ -673,7 +675,6 @@ void y86_go(Y_data *y, Y_word step) {
         switch (y->reg[yr_st]) {
             case ys_ima:
                 // Already failed
-                y->reg[yr_sc] -= 1;
                 y->reg[yr_pc] += 1;
 
                 y->reg[yr_st] = ys_adr;
