@@ -1,0 +1,4 @@
+# test subl
+	subl %esi, %edi
+	halt
+# end

@@ -1,0 +1,4 @@
+# test cmovl
+	cmovl %esi, %edi
+	halt
+# end

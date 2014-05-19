@@ -1,0 +1,5 @@
+# test rrmovl
+	rrmovl %eax, %ebx
+	rrmovl %ecx, %esi
+	halt
+# end

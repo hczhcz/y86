@@ -1,0 +1,4 @@
+# test cmovg
+	cmovg %eax, %ebx
+	halt
+# end

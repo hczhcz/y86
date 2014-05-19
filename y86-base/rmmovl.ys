@@ -1,0 +1,6 @@
+# test rmmovl
+	rmmovl %ecx, 4(%ecx)
+	rmmovl %ecx, (%ebx)
+	rmmovl %eax, 12(%ebp)
+	halt
+# end

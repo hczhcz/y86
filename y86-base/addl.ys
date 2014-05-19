@@ -1,0 +1,4 @@
+# test addl
+	addl %esi, %edi
+	halt
+# end
