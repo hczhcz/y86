@@ -516,7 +516,7 @@ void y86_trace_ip(Y_data *y) {
 void __attribute__ ((noinline)) y86_exec(Y_data *y) {
     __asm__ __volatile__(
         "pushal" "\n\t"
-        "pushfd" "\n\t"
+        "pushf" "\n\t"
 
         "movd %%esp, %%mm0" "\n\t"
         "movl %0, %%esp" "\n\t"
@@ -533,12 +533,12 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
         "movd %%esp, %%mm2" "\n\t"
 
         "subl $8, %%esp" "\n\t"
-        "popfd" "\n\t"
+        "popf" "\n\t"
 
     // Checking before calling
     "y86_check:" "\n\t"
 
-        "pushfd" "\n\t"
+        "pushf" "\n\t"
         "movd %%eax, %%mm3" "\n\t"
 
         // Check state
@@ -557,7 +557,7 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
     "y86_call:" "\n\t"
 
         "movd %%mm3, %%eax" "\n\t"
-        "popfd" "\n\t"
+        "popf" "\n\t"
 
         "ret" "\n\t"
 
@@ -624,7 +624,7 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
 
         "movd %%mm0, %%esp" "\n\t"
 
-        "popfd" "\n\t"
+        "popf" "\n\t"
         "popal"// "\n\t"
         :
         : "r" (&y->reg[0])
@@ -658,7 +658,7 @@ void y86_trace_pc(Y_data *y) {
 
 Y_word y86_get_im_ptr() {
     Y_word result;
-    __asm__("movd %%mm4, %0": "=r" (result));
+    __asm__ __volatile__("movd %%mm4, %0": "=r" (result));
     return result;
 }
 
