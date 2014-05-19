@@ -71,12 +71,14 @@ void y86_gen_check(Y_data *y) {
     YX(0xFF) YX(0x14) YX(0x24) // call (%esp)
 }
 
+const Y_char y86_after_goto_size = 16;
+
 void y86_gen_after_goto(Y_data *y, Y_addr value) {
     // If changed, size should be updated (for jump instruction etc.)
 
     y86_gen_after(y);
     YX(0x0F) YX(0x7E) YX(0xD4) // movd %mm2, %esp
-    YX(0x68) YXA(value) // push value
+    YX(0xFF) YX(0x35) YXA(value) // push value
     YX(0xFF) YX(0x64) YX(0x24) YX(0x04) // jmp 4(%esp)
 }
 
@@ -238,63 +240,60 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
         case yi_jge:
         case yi_jg:
             if (val >= 0 && val < Y_Y_INST_SIZE) {
-                if (y->x_map[val]) {
-                    switch (op) {
-                        case yi_jmp:
-                            break;
-                        case yi_jle:
-                            YX(0x7F) YX(0x0F) // jg +15
-                            break;
-                        case yi_jl:
-                            YX(0x7D) YX(0x0F) // jge +15
-                            break;
-                        case yi_je:
-                            YX(0x75) YX(0x0F) // jne +15
-                            break;
-                        case yi_jne:
-                            YX(0x74) YX(0x0F) // je +15
-                            break;
-                        case yi_jge:
-                            YX(0x7C) YX(0x0F) // jl +15
-                            break;
-                        case yi_jg:
-                            YX(0x7E) YX(0x0F) // jle +15
-                            break;
-                        default:
-                            // Impossible
-                            fprintf(stderr, "Internal bug!\n");
-                            longjmp(y->jmp, ys_ccf);
-                            break;
-                    }
-                    y86_gen_after_goto(y, y->x_map[val]);
-                } else {
-                    y86_gen_stat(y, ys_inp); // TODO: use load()
+                switch (op) {
+                    case yi_jmp:
+                        break;
+                    case yi_jle:
+                        YX(0x7F) YX(y86_after_goto_size) // jg after
+                        break;
+                    case yi_jl:
+                        YX(0x7D) YX(y86_after_goto_size) // jge after
+                        break;
+                    case yi_je:
+                        YX(0x75) YX(y86_after_goto_size) // jne after
+                        break;
+                    case yi_jne:
+                        YX(0x74) YX(y86_after_goto_size) // je after
+                        break;
+                    case yi_jge:
+                        YX(0x7C) YX(y86_after_goto_size) // jl after
+                        break;
+                    case yi_jg:
+                        YX(0x7E) YX(y86_after_goto_size) // jle after
+                        break;
+                    default:
+                        // Impossible
+                        fprintf(stderr, "Internal bug!\n");
+                        longjmp(y->jmp, ys_ccf);
+                        break;
                 }
+
+                if (!y->x_map[val]) {
+                    y->x_map[val] = Y_BAD_ADDR;
+                }
+                y86_gen_after_goto(y, (Y_addr) &(y->x_map[val]));
+
             } else {
                 y86_gen_stat(y, ys_adp);
             }
             break;
         case yi_call:
             if (val >= 0 && val < Y_Y_INST_SIZE) {
-                if (y->x_map[val]) {
-                    // YX(0x83) YX(0xEC) YX(0x04) // subl $4, %esp
-                    YX(0x8D) YX(0x64) YX(0x24) YX(0xFC) // leal -4(%esp), %esp
+                YX(0x8D) YX(0x64) YX(0x24) YX(0xFC) // leal -4(%esp), %esp
 
-                    y86_gen_interrupt_ready(y, ys_ima);
-                    y86_gen_interrupt_go(y);
+                y86_gen_interrupt_ready(y, ys_ima);
+                y86_gen_interrupt_go(y);
 
-                    // YX(0x81) YX(0xC4) YXA(&(y->mem[0]) + 4) // addl offset+4, %esp
-                    YX(0x8D) YX(0xA4) YX(0x24) YXW(4 + (Y_word) &(y->mem[0])) // leal offset+4(%esp), %esp
-                    YX(0x68) YX(y->reg[yr_pc] + 5) // push %pc+5
-                    // YX(0x81) YX(0xEC) YXA(&(y->mem[0])) // subl offset, %esp
-                    YX(0x8D) YX(0xA4) YX(0x24) YXW(0 - (Y_word) &(y->mem[0])) // leal -offset(%esp), %esp
+                YX(0x8D) YX(0xA4) YX(0x24) YXW(4 + (Y_word) &(y->mem[0])) // leal offset+4(%esp), %esp
+                YX(0x68) YX(y->reg[yr_pc] + 5) // push %pc+5
+                YX(0x8D) YX(0xA4) YX(0x24) YXW(0 - (Y_word) &(y->mem[0])) // leal -offset(%esp), %esp
 
-                    y86_gen_stat(y, ys_imc);
+                y86_gen_stat(y, ys_imc);
 
-                    y86_gen_after_goto(y, y->x_map[val]);
-                } else {
-                    y86_gen_stat(y, ys_inp); // TODO: use load() // TODO: add ys_ima checking?
+                if (!y->x_map[val]) {
+                    y->x_map[val] = Y_BAD_ADDR;
                 }
+                y86_gen_after_goto(y, (Y_addr) &(y->x_map[val]));
             } else {
                 y86_gen_stat(y, ys_adp);
             }
@@ -305,7 +304,6 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             break;
         case yi_pushl:
             if (ra < yr_cnt && rb == yr_nil) {
-                // YX(0x83) YX(0xEC) YX(0x04) // subl $4, %esp
                 YX(0x8D) YX(0x64) YX(0x24) YX(0xFC) // leal -4(%esp), %esp
 
                 y86_gen_interrupt_ready(y, ys_ima);
@@ -327,7 +325,6 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
                 YX(0x8B) YX(y86_x_regbyte_8(ra, yri_esp)) // movl (%esp), $ra
                 YXW(val + (Y_word) &(y->mem[0]))
 
-                // YX(0x83) YX(0xC4) YX(0x04) // addl $4, %esp
                 YX(0x8D) YX(0x64) YX(0x24) YX(0x04) // leal 4(%esp), %esp
             } else {
                 y86_gen_stat(y, ys_ins);
@@ -438,7 +435,7 @@ void y86_load(Y_data *y, Y_char *begin) {
         while (inst != end) {
             y->reg[yr_pc] = inst - begin;
 
-            if (y->x_map[y->reg[yr_pc]]) {
+            if (y->x_map[y->reg[yr_pc]] && y->x_map[y->reg[yr_pc]] != Y_BAD_ADDR) {
                 y86_gen_raw_jmp(y, y->x_map[y->reg[yr_pc]]);
             } else {
                 y86_link_x_map(y, y->reg[yr_pc]);
@@ -451,7 +448,7 @@ void y86_load(Y_data *y, Y_char *begin) {
         }
 
         for (inst = begin; inst != end; ++inst) {
-            if (y->x_map[inst - begin] == (Y_addr) -1) break;
+            if (y->x_map[inst - begin] == Y_BAD_ADDR) break;
         }
 
         y86_link_x_map(y, y->reg[yr_pc] + 1);

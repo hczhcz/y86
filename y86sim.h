@@ -7,6 +7,7 @@
 #define LOW(pack) ((pack) & 0xF)
 #define IO_WORD(data) (*(Y_word *) (data))
 #define IO_ADDR(data) (*(Y_addr *) (data))
+#define DEBUG(data) fprintf(stderr, "TEST: %x\n", data)
 
 #define Y_MEM_SIZE 0x2000
 #define Y_X_INST_SIZE 0x2000
@@ -14,6 +15,7 @@
 #define Y_MASK_NOT_MEM "0xFFFFE000" // "0x1FFF"
 #define Y_MASK_NOT_INST "0xFFFFFE00" // "0x01FF"
 #define Y_PROTECT_MEM // Protect mem[>= mem_size]
+#define Y_BAD_ADDR ((Y_addr) 0xFFFFFFFF)
 // #define Y_STEP_MAX_DEFAULT 10000
 
 typedef char Y_char;
