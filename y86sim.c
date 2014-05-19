@@ -176,13 +176,13 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             if (ra < yr_cnt && rb < yr_cnt) {
                 y86_gen_interrupt_ready(y, ys_ima);
                 YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), %esp
-                if (rb == yri_ebx) YX(0x24) // Extra byte for %ebx
+                if (rb == yri_esp) YX(0x24) // Extra byte for %esp
                 YXW(val)
                 y86_gen_interrupt_go(y);
 
                 YX(0x89) YX(y86_x_regbyte_8(ra, rb)) // movl ...
-                if (rb == yri_ebx) YX(0x24) // Extra byte for %ebx
-                YXW(val + (Y_word) &(y->mem[0]))
+                if (rb == yri_esp) YX(0x24) // Extra byte for %esp
+                YXA(&(y->mem[val]))
 
                 y86_gen_stat(y, ys_imc);
             } else {
@@ -193,13 +193,13 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             if (ra < yr_cnt && rb < yr_cnt) {
                 y86_gen_interrupt_ready(y, ys_ima);
                 YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), %esp
-                if (rb == yri_ebx) YX(0x24) // Extra byte for %ebx
+                if (rb == yri_esp) YX(0x24) // Extra byte for %esp
                 YXW(val)
                 y86_gen_interrupt_go(y);
 
                 YX(0x8B) YX(y86_x_regbyte_8(ra, rb)) // movl ...
-                if (rb == yri_ebx) YX(0x24) // ???
-                YXW(val + (Y_word) &(y->mem[0]))
+                if (rb == yri_esp) YX(0x24) // Extra byte for %esp
+                YXA(&(y->mem[val]))
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -309,8 +309,9 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
                 y86_gen_interrupt_ready(y, ys_ima);
                 y86_gen_interrupt_go(y);
 
-                YX(0x89) YX(y86_x_regbyte_8(ra, yri_esp)) // movl %ra, (%esp)
-                YXW(val + (Y_word) &(y->mem[0]))
+                YX(0x89) YX(y86_x_regbyte_8(ra, yri_esp)) // movl %ra, offset(%esp)
+                YX(0x24) // Extra byte for %esp
+                YXA(&(y->mem[0]))
 
                 y86_gen_stat(y, ys_imc);
             } else {
@@ -322,8 +323,9 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
                 y86_gen_interrupt_ready(y, ys_ima);
                 y86_gen_interrupt_go(y);
 
-                YX(0x8B) YX(y86_x_regbyte_8(ra, yri_esp)) // movl (%esp), $ra
-                YXW(val + (Y_word) &(y->mem[0]))
+                YX(0x8B) YX(y86_x_regbyte_8(ra, yri_esp)) // movl offset(%esp), $ra
+                YX(0x24) // Extra byte for %esp
+                YXA(&(y->mem[0]))
 
                 YX(0x8D) YX(0x64) YX(0x24) YX(0x04) // leal 4(%esp), %esp
             } else {

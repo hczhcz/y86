@@ -76,14 +76,14 @@ typedef enum {
 } Y_reg_lyt;
 
 typedef enum {
-    yri_edi = 0x0,
-    yri_esi = 0x1,
-    yri_ebp = 0x2,
-    yri_esp = 0x3,
-    yri_ebx = 0x4,
-    yri_edx = 0x5,
-    yri_ecx = 0x6,
-    yri_eax = 0x7,
+    yri_eax = 0x0,
+    yri_ecx = 0x1,
+    yri_edx = 0x2,
+    yri_ebx = 0x3,
+    yri_esp = 0x4,
+    yri_ebp = 0x5,
+    yri_esi = 0x6,
+    yri_edi = 0x7,
     yr_cnt  = 0x8, // Register counting
     yr_nil  = 0xF  // Null
 } Y_reg_id;
