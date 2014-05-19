@@ -313,7 +313,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
 
                 YX(0x89) YX(y86_x_regbyte_8(ra, yri_esp)) // movl %ra, offset-4(%esp)
                 YX(0x24) // Extra byte for %esp
-                YXA(&(y->mem[-4]))
+                YXA(&(y->mem[0]) - 4)
 
                 YX(0x8D) YX(0x64) YX(0x24) YX(0xFC) // leal -4(%esp), %esp
 
@@ -331,7 +331,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
 
                 YX(0x8B) YX(y86_x_regbyte_8(ra, yri_esp)) // movl offset-4(%esp), $ra
                 YX(0x24) // Extra byte for %esp
-                YXA(&(y->mem[-4]))
+                YXA(&(y->mem[0]) - 4)
             } else {
                 y86_gen_stat(y, ys_ins);
             }
@@ -631,16 +631,27 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
 
 void y86_trace_pc(Y_data *y) {
     Y_word index;
+    Y_word diff;
+    Y_word index_x;
+    Y_word diff_x = Y_X_INST_SIZE;
+
     for (index = 0; index < Y_Y_INST_SIZE; ++index) {
-        if (y->reg[yr_rey] == (Y_word) y->x_map[index]) {
-            y->reg[yr_pc] = index;
+        diff = y->reg[yr_rey] - (Y_word) y->x_map[index];
+
+        // After step
+        if (!diff) {
+            index_x = index;
             break;
         }
+
+        // After interrupt
+        if (diff > 0 && diff < diff_x) {
+            index_x = index;
+            diff_x = diff;
+        }
     }
-    if (index == Y_Y_INST_SIZE) {
-        fprintf(stderr, "Unknown instruction pointer at 0x%x (PC = 0x%x, X[PC] = 0x%x)\n", y->reg[yr_rey], y->reg[yr_pc], (Y_word) y->x_map[y->reg[yr_pc]]);
-        longjmp(y->jmp, ys_inp);
-    }
+
+    y->reg[yr_pc] = index_x;
 }
 
 Y_word y86_get_im_ptr() {
@@ -657,7 +668,7 @@ void y86_go(Y_data *y, Y_word step) {
     do {
         y86_trace_ip(y);
         y86_exec(y);
-        if (y->reg[yr_st] != ys_ima) y86_trace_pc(y);
+        y86_trace_pc(y);
 
         switch (y->reg[yr_st]) {
             case ys_ima:
