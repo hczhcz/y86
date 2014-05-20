@@ -667,22 +667,24 @@ void y86_go(Y_data *y, Y_word step) {
 
     y86_ready(y, step);
 
+    y86_trace_ip(y);
     do {
-        y86_trace_ip(y);
         y86_exec(y);
-        y86_trace_pc(y);
 
         switch (y->reg[yr_st]) {
             case ys_ima:
+                y86_trace_pc(y);
+
                 // Already failed
                 y->reg[yr_pc] += 1;
-
                 y->reg[yr_st] = ys_adr;
 
                 goon = 0;
                 break;
 
             case ys_imc:
+                // y86_trace_pc(y);
+
                 // TODO: checking
                 if (y86_get_im_ptr() + 4 < y->reg[yr_len]) {
                     y->reg[yr_len] = y86_get_im_ptr() + 4;
@@ -692,9 +694,12 @@ void y86_go(Y_data *y, Y_word step) {
                 y->reg[yr_st] = ys_aok;
 
                 goon = 1;
+                // y86_trace_ip(y);
                 break;
 
             case ys_ret:
+                // y86_trace_pc(y);
+
                 // TODO: checking
 
                 // Do return
@@ -713,9 +718,11 @@ void y86_go(Y_data *y, Y_word step) {
                 y->reg[yr_st] = ys_aok;
 
                 goon = 1;
+                y86_trace_ip(y);
                 break;
 
             default:
+                y86_trace_pc(y);
                 goon = 0;
                 break;
         }
