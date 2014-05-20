@@ -58,25 +58,29 @@ void y86_link_x_map(Y_data *y, Y_word pos) {
     }
 }
 
-void y86_gen_before(Y_data *y) {
-    YX(0x0F) YX(0x7E) YX(0xCC) // movd %mm1, %esp
+void y86_gen_before(Y_data *y, Y_word protect_esp) {
+    if (protect_esp) {
+        YX(0x0F) YX(0x7E) YX(0xCC) // movd %mm1, %esp
+    }
 }
 
-void y86_gen_after(Y_data *y) {
-    YX(0x0F) YX(0x6E) YX(0xCC) // movd %esp, %mm1
+void y86_gen_after(Y_data *y, Y_word protect_esp) {
+    if (protect_esp) {
+        YX(0x0F) YX(0x6E) YX(0xCC) // movd %esp, %mm1
+    }
 }
 
-void y86_gen_check(Y_data *y) {
-    YX(0x0F) YX(0x7E) YX(0xD4) // movd %mm2, %esp
+void y86_gen_check(Y_data *y, Y_word protect_esp) {
+    if (protect_esp) {
+        YX(0x0F) YX(0x7E) YX(0xD4) // movd %mm2, %esp
+    }
     YX(0xFF) YX(0x14) YX(0x24) // call (%esp)
 }
 
-const Y_char y86_after_goto_size = 16;
+void y86_gen_after_goto(Y_data *y, Y_addr value, Y_word protect_esp) {
+    // If changed, value of jmp_skip should be updated (for jump instruction etc.)
 
-void y86_gen_after_goto(Y_data *y, Y_addr value) {
-    // If changed, size should be updated (for jump instruction etc.)
-
-    y86_gen_after(y);
+    y86_gen_after(y, protect_esp);
     YX(0x0F) YX(0x7E) YX(0xD4) // movd %mm2, %esp
     YX(0xFF) YX(0x35) YXA(value) // push value
     YX(0xFF) YX(0x64) YX(0x24) YX(0x04) // jmp 4(%esp)
@@ -99,24 +103,27 @@ Y_char y86_x_regbyte_8(Y_reg_id ra, Y_reg_id rb) {
 }
 
 void y86_gen_protect(Y_data *y) {
-    y86_gen_before(y);
     y86_gen_stat(y, ys_hlt);
-    y86_gen_after(y);
-    y86_gen_check(y);
+    y86_gen_check(y, 0);
 }
 
-void y86_gen_interrupt_ready(Y_data *y, Y_stat stat) {
+void y86_gen_interrupt_ready(Y_data *y, Y_stat stat, Y_word protect_esp) {
     y86_gen_stat(y, stat);
-    y86_gen_after(y);
+    y86_gen_after(y, protect_esp);
 }
 
-void y86_gen_interrupt_go(Y_data *y) {
+void y86_gen_interrupt_go(Y_data *y, Y_word protect_esp) {
     YX(0x0F) YX(0x6E) YX(0xE4) // movd %esp, %mm4
-    y86_gen_check(y);
-    y86_gen_before(y);
+    y86_gen_check(y, 1);
+    y86_gen_before(y, protect_esp);
 }
 
 void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
+    Y_word protect_esp = (ra == yri_esp) || (rb == yri_esp) || ((Y_char) op < 0);
+    Y_word jmp_skip = protect_esp ? 16 : 13;
+
+    y86_gen_before(y, protect_esp);
+
     // Always: ra, rb >= 0
     switch (op) {
         case yi_halt:
@@ -174,11 +181,11 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             break;
         case yi_rmmovl:
             if (ra < yr_cnt && rb < yr_cnt) {
-                y86_gen_interrupt_ready(y, ys_ima);
+                y86_gen_interrupt_ready(y, ys_ima, protect_esp);
                 YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), %esp
                 if (rb == yri_esp) YX(0x24) // Extra byte for %esp
                 YXW(val)
-                y86_gen_interrupt_go(y);
+                y86_gen_interrupt_go(y, protect_esp);
 
                 YX(0x89) YX(y86_x_regbyte_8(ra, rb)) // movl ...
                 if (rb == yri_esp) YX(0x24) // Extra byte for %esp
@@ -191,11 +198,11 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             break;
         case yi_mrmovl:
             if (ra < yr_cnt && rb < yr_cnt) {
-                y86_gen_interrupt_ready(y, ys_ima);
+                y86_gen_interrupt_ready(y, ys_ima, protect_esp);
                 YX(0x8D) YX(0xA0 + rb) // leal offset(%rb), %esp
                 if (rb == yri_esp) YX(0x24) // Extra byte for %esp
                 YXW(val)
-                y86_gen_interrupt_go(y);
+                y86_gen_interrupt_go(y, protect_esp);
 
                 YX(0x8B) YX(y86_x_regbyte_8(ra, rb)) // movl ...
                 if (rb == yri_esp) YX(0x24) // Extra byte for %esp
@@ -244,22 +251,22 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
                     case yi_jmp:
                         break;
                     case yi_jle:
-                        YX(0x7F) YX(y86_after_goto_size) // jg after
+                        YX(0x7F) YX(jmp_skip) // jg after
                         break;
                     case yi_jl:
-                        YX(0x7D) YX(y86_after_goto_size) // jge after
+                        YX(0x7D) YX(jmp_skip) // jge after
                         break;
                     case yi_je:
-                        YX(0x75) YX(y86_after_goto_size) // jne after
+                        YX(0x75) YX(jmp_skip) // jne after
                         break;
                     case yi_jne:
-                        YX(0x74) YX(y86_after_goto_size) // je after
+                        YX(0x74) YX(jmp_skip) // je after
                         break;
                     case yi_jge:
-                        YX(0x7C) YX(y86_after_goto_size) // jl after
+                        YX(0x7C) YX(jmp_skip) // jl after
                         break;
                     case yi_jg:
-                        YX(0x7E) YX(y86_after_goto_size) // jle after
+                        YX(0x7E) YX(jmp_skip) // jle after
                         break;
                     default:
                         // Impossible
@@ -271,7 +278,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
                 if (!y->x_map[val]) {
                     y->x_map[val] = Y_BAD_ADDR;
                 }
-                y86_gen_after_goto(y, (Y_addr) &(y->x_map[val]));
+                y86_gen_after_goto(y, (Y_addr) &(y->x_map[val]), protect_esp);
 
             } else {
                 y86_gen_stat(y, ys_adp);
@@ -281,8 +288,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             if (val >= 0 && val < Y_Y_INST_SIZE) {
                 YX(0x8D) YX(0x64) YX(0x24) YX(0xFC) // leal -4(%esp), %esp
 
-                y86_gen_interrupt_ready(y, ys_ima);
-                y86_gen_interrupt_go(y);
+                y86_gen_interrupt_ready(y, ys_ima, protect_esp);
+                y86_gen_interrupt_go(y, protect_esp);
 
                 YX(0x8D) YX(0xA4) YX(0x24) YXW(4 + (Y_word) &(y->mem[0])) // leal offset+4(%esp), %esp
                 YX(0x68) YXW(y->reg[yr_pc] + 5) // push %pc+5
@@ -293,7 +300,7 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
                 if (!y->x_map[val]) {
                     y->x_map[val] = Y_BAD_ADDR;
                 }
-                y86_gen_after_goto(y, (Y_addr) &(y->x_map[val]));
+                y86_gen_after_goto(y, (Y_addr) &(y->x_map[val]), protect_esp);
             } else {
                 y86_gen_stat(y, ys_adp);
             }
@@ -306,8 +313,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             if (ra < yr_cnt && rb == yr_nil) {
                 YX(0x8D) YX(0x64) YX(0x24) YX(0xFC) // leal -4(%esp), %esp
 
-                y86_gen_interrupt_ready(y, ys_ima);
-                y86_gen_interrupt_go(y);
+                y86_gen_interrupt_ready(y, ys_ima, protect_esp);
+                y86_gen_interrupt_go(y, protect_esp);
 
                 YX(0x8D) YX(0x64) YX(0x24) YX(0x04) // leal 4(%esp), %esp // TODO: need optimization
 
@@ -324,8 +331,8 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             break;
         case yi_popl:
             if (ra < yr_cnt && rb == yr_nil) {
-                y86_gen_interrupt_ready(y, ys_ima);
-                y86_gen_interrupt_go(y);
+                y86_gen_interrupt_ready(y, ys_ima, protect_esp);
+                y86_gen_interrupt_go(y, protect_esp);
 
                 YX(0x8D) YX(0x64) YX(0x24) YX(0x04) // leal 4(%esp), %esp
 
@@ -345,6 +352,9 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             longjmp(y->jmp, ys_ccf);
             break;
     }
+
+    y86_gen_after(y, protect_esp);
+    y86_gen_check(y, protect_esp);
 }
 
 void y86_parse(Y_data *y, Y_char **inst, Y_char *end) {
@@ -445,11 +455,7 @@ void y86_load(Y_data *y, Y_char *begin) {
                 y86_gen_raw_jmp(y, y->x_map[y->reg[yr_pc]]);
             } else {
                 y86_link_x_map(y, y->reg[yr_pc]);
-
-                y86_gen_before(y);
                 y86_parse(y, &inst, end);
-                y86_gen_after(y);
-                y86_gen_check(y);
             }
         }
 
