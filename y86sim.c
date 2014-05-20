@@ -848,8 +848,12 @@ Y_stat f_main(Y_char *fname, Y_word step) {
         // Load
         if (strcmp(fname, "nil")) {
             y86_load_file(y, fname);
-            y86_load_all(y);
+        } else {
+            y->reg[yr_len] = 1;
+            y->mem[0] = yi_halt;
         }
+
+        y86_load_all(y);
 
         // Exec
         y86_go(y, step);
