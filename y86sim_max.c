@@ -375,6 +375,10 @@ void y86_load_reset(Y_data *y) {
 void y86_load(Y_data *y, Y_char *begin) {
     Y_char *inst = begin;
     Y_char *end = &(y->mem[y->reg[yr_len]]);
+    while (*end) {
+        y->reg[yr_len]++;
+        end = &(y->mem[y->reg[yr_len]]);
+    }
 
     Y_word pc = y->reg[yr_pc];
 
@@ -443,11 +447,7 @@ void y86_ready(Y_data *y) {
 }
 
 void y86_trace_ip(Y_data *y) {
-    if (y->x_map[y->reg[yr_pc]]) {
-        y->reg[yr_rey] = (Y_word) y->x_map[y->reg[yr_pc]];    
-    } else {
-        // TODO
-    }
+    y->reg[yr_rey] = (Y_word) &(y->x_inst[0]);
 }
 
 void __attribute__ ((noinline)) y86_exec(Y_data *y) {
@@ -492,27 +492,13 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
 
 void y86_trace_pc(Y_data *y) {
     Y_word index;
-    Y_word diff;
-    Y_word index_x;
-    Y_word diff_x = Y_X_INST_SIZE;
 
     for (index = 0; index < Y_Y_INST_SIZE; ++index) {
-        diff = y->reg[yr_rey] - (Y_word) y->x_map[index];
-
-        // After step
-        if (!diff) {
-            index_x = index;
-            break;
-        }
-
-        // After interrupt
-        if (diff > 0 && diff < diff_x) {
-            index_x = index;
-            diff_x = diff;
+        if (y->reg[yr_rey] == (Y_word) y->x_map[index]) {
+            y->reg[yr_pc] = index;
+            return;
         }
     }
-
-    y->reg[yr_pc] = index_x;
 }
 
 Y_word y86_trace_pc_2(Y_data *y, Y_word value) {

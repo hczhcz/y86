@@ -443,6 +443,10 @@ void y86_load_reset(Y_data *y) {
 void y86_load(Y_data *y, Y_char *begin) {
     Y_char *inst = begin;
     Y_char *end = &(y->mem[y->reg[yr_len]]);
+    while (*end) {
+        y->reg[yr_len]++;
+        end = &(y->mem[y->reg[yr_len]]);
+    }
 
     Y_word pc = y->reg[yr_pc];
 
@@ -512,9 +516,9 @@ void y86_ready(Y_data *y, Y_word step) {
 
 void y86_trace_ip(Y_data *y) {
     if (y->x_map[y->reg[yr_pc]]) {
-        y->reg[yr_rey] = (Y_word) y->x_map[y->reg[yr_pc]];    
+        y->reg[yr_rey] = (Y_word) y->x_map[y->reg[yr_pc]];
     } else {
-        // TODO
+        y86_load(y, &(y->mem[y->reg[yr_pc]]));
     }
 }
 
@@ -602,11 +606,11 @@ void __attribute__ ((noinline)) y86_exec(Y_data *y) {
 
         "y86_int_imc:" "\n\t"
 
-            // If mm4 < inst_size, handle by outer
+            // If mm4 <= current inst size, handle by outer
             "movd %%mm4, %%eax" "\n\t"
 
-            "andl $" Y_MASK_NOT_INST ", %%eax" "\n\t"
-            "jnz y86_check_2" "\n\t"
+            "cmpl 16(%%esp), %%eax" "\n\t"
+            "jg y86_check_2" "\n\t"
 
             "jmp y86_fin" "\n\t"
 
@@ -690,7 +694,6 @@ void y86_go(Y_data *y, Y_word step) {
             case ys_imc:
                 // y86_trace_pc(y);
 
-                // TODO: checking
                 if (y86_get_im_ptr() + 4 < y->reg[yr_len]) {
                     y->reg[yr_len] = y86_get_im_ptr() + 4;
                 }
