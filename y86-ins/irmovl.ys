@@ -1,0 +1,5 @@
+# test irmovl
+	irmovl $123, %eax
+	irmovl $-123, %ebx
+	halt
+# end

@@ -1,0 +1,4 @@
+# test for error handling of unknown symbol
+	jmp Loop
+	halt
+# end

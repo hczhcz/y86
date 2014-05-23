@@ -87,7 +87,7 @@ void y86_gen_after_goto(Y_data *y, Y_addr value, Y_word protect_esp) {
 }
 
 void y86_gen_stat(Y_data *y, Y_stat stat) {
-    YX(0x0F) YX(0x6E) YX(0x3D) YXA((Y_addr) &(y_static_num[stat])) // movd stat, %mm6
+    YX(0x0F) YX(0x6E) YX(0x3D) YXA((Y_addr) &(y_static_num[stat])) // movd stat, %mm7
 }
 
 void y86_gen_raw_jmp(Y_data *y, Y_addr value) {
@@ -279,7 +279,6 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
                     y->x_map[val] = Y_BAD_ADDR;
                 }
                 y86_gen_after_goto(y, (Y_addr) &(y->x_map[val]), protect_esp);
-
             } else {
                 y86_gen_stat(y, ys_adp);
             }

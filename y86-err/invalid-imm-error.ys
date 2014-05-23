@@ -1,0 +1,4 @@
+# test for error handling of invalid immediate
+	irmovl $abc, %ebx
+	halt
+# end

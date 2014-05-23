@@ -1,0 +1,4 @@
+# test for error handling of invalid memory
+	mrmovl 8(%ebp, %ecx
+	halt
+# end

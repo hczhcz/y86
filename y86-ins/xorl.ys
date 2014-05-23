@@ -1,0 +1,4 @@
+# test xorl
+	xorl %esi, %edi
+	halt
+# end

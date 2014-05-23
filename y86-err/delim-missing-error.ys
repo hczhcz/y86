@@ -1,0 +1,4 @@
+# test for error-handling for missing delimiter
+	rrmovl %esp %ebp
+	halt
+# end

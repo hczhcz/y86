@@ -1,0 +1,6 @@
+# test mrmovl
+	mrmovl -2(%esp), %eax
+	mrmovl (%ebx), %esi
+	mrmovl 8(%ebp), %ecx
+	halt
+# end

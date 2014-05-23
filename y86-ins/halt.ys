@@ -1,0 +1,3 @@
+# halt immediately
+	halt			# Terminate program 
+# end

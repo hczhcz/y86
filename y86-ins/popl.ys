@@ -1,0 +1,4 @@
+# test popl
+	popl %ebp
+	halt
+# end
