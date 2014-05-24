@@ -58,11 +58,25 @@ void y86_link_x_map(Y_data *y, Y_word pos) {
     }
 }
 
+void y86_gen_enesp(Y_data *y) {
+    YX(0x8D) YX(0xA4) YX(0x24) YXA(&y->mem[0]) // leal y->mem(%esp), %esp
+}
+
+void y86_gen_enesp_d4(Y_data *y) {
+    YX(0x8D) YX(0xA4) YX(0x24) YXW((Y_word) &y->mem[0] - 4) // leal y->mem-4(%esp), %esp
+}
+
+void y86_gen_deesp(Y_data *y) {
+    YX(0x8D) YX(0xA4) YX(0x24) YXW(- (Y_word) &y->mem[0]) // leal -y->mem(%esp), %esp
+}
+
 void y86_gen_enter(Y_data *y) {
     YX(0x0F) YX(0x7E) YX(0xCC) // movd %mm1, %esp
+    y86_gen_enesp(y);
 }
 
 void y86_gen_leave(Y_data *y) {
+    y86_gen_deesp(y);
     YX(0x0F) YX(0x6E) YX(0xCC) // movd %esp, %mm1
     YX(0x0F) YX(0x7E) YX(0xD4) // movd %mm2, %esp
     YX(0xFF) YX(0x14) YX(0x24) // call (%esp)
@@ -112,6 +126,10 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
         case yi_cmovge:
         case yi_cmovg:
             if (ra < yr_cnt && rb < yr_cnt) {
+                if ((ra == yri_esp) != (rb == yri_esp)) {
+                    y86_gen_deesp(y);
+                }
+
                 switch (op) {
                     case yi_rrmovl:
                         YX(0x89) YX(y86_x_regbyte_C(ra, rb)) // movl ...
@@ -140,6 +158,10 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
                         longjmp(y->jmp, ys_ccf);
                         break;
                 }
+
+                if ((ra == yri_esp) != (rb == yri_esp)) {
+                    y86_gen_enesp(y);
+                }
             } else {
                 y86_gen_return(y, ys_ins);
             }
@@ -147,15 +169,27 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
         case yi_irmovl:
             if (ra == yr_nil && rb < yr_cnt) {
                 YX(0xB8 + rb) YXW(val) // movl ...
+
+                if (rb == yri_esp) {
+                    y86_gen_enesp(y);
+                }
             } else {
                 y86_gen_return(y, ys_ins);
             }
             break;
         case yi_rmmovl:
             if (ra < yr_cnt && rb < yr_cnt) {
+                if (ra == yri_esp) {
+                    y86_gen_deesp(y);
+                }
+
                 YX(0x89) YX(y86_x_regbyte_8(ra, rb)) // movl ...
                 if (rb == yri_esp) YX(0x24) // Extra byte for %esp
                 YXA(&(y->mem[val]))
+
+                if (ra == yri_esp) {
+                    y86_gen_enesp(y);
+                }
             } else {
                 y86_gen_return(y, ys_ins);
             }
@@ -165,6 +199,10 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
                 YX(0x8B) YX(y86_x_regbyte_8(ra, rb)) // movl ...
                 if (rb == yri_esp) YX(0x24) // Extra byte for %esp
                 YXA(&(y->mem[val]))
+
+                if (ra == yri_esp) {
+                    y86_gen_enesp(y);
+                }
             } else {
                 y86_gen_return(y, ys_ins);
             }
@@ -176,16 +214,48 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             if (ra < yr_cnt && rb < yr_cnt) {
                 switch (op) {
                     case yi_addl:
+                        if (ra == yri_esp) {
+                            y86_gen_deesp(y);
+                        }
+
                         YX(0x01) YX(y86_x_regbyte_C(ra, rb)) // addl ...
+
+                        if (ra == yri_esp) {
+                            y86_gen_enesp(y);
+                        }
                         break;
                     case yi_subl:
+                        if (ra == yri_esp) {
+                            y86_gen_deesp(y);
+                        }
+
                         YX(0x29) YX(y86_x_regbyte_C(ra, rb)) // subl ...
+
+                        if (ra == yri_esp) {
+                            y86_gen_enesp(y);
+                        }
                         break;
                     case yi_andl:
+                        if ((ra == yri_esp) != (rb == yri_esp)) {
+                            y86_gen_deesp(y);
+                        }
+
                         YX(0x21) YX(y86_x_regbyte_C(ra, rb)) // andl ...
+
+                        if ((ra == yri_esp) != (rb == yri_esp)) {
+                            y86_gen_enesp(y);
+                        }
                         break;
                     case yi_xorl:
+                        if ((ra == yri_esp) || (rb == yri_esp)) {
+                            y86_gen_deesp(y);
+                        }
+
                         YX(0x31) YX(y86_x_regbyte_C(ra, rb)) // xorl ...
+
+                        if ((ra == yri_esp) || (rb == yri_esp)) {
+                            y86_gen_enesp(y);
+                        }
                         break;
                     default:
                         // Impossible
@@ -252,27 +322,42 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             }
             break;
         case yi_ret:
-            YX(0xC3)
+            YX(0xC3) // ret
 
             break;
         case yi_pushl:
             if (ra < yr_cnt && rb == yr_nil) {
-                YX(0x89) YX(y86_x_regbyte_8(ra, yri_esp)) // movl %ra, offset-4(%esp)
-                YX(0x24) // Extra byte for %esp
-                YXA(&(y->mem[0]) - 4)
+                if (ra == yri_esp) {
+                    y86_gen_deesp(y);
 
-                YX(0x8D) YX(0x64) YX(0x24) YX(0xFC) // leal -4(%esp), %esp
+                    YX(0x89) YX(y86_x_regbyte_8(ra, yri_esp)) // movl %ra, offset-4(%esp)
+                    YX(0x24) // Extra byte for %esp
+                    YXA(&(y->mem[0]) - 4)
+
+                    y86_gen_enesp_d4(y);
+                    // YX(0x8D) YX(0x64) YX(0x24) YX(0xFC) // leal -4(%esp), %esp
+                } else {
+                    YX(0x50 + ra) // pushl %ra
+                }
             } else {
                 y86_gen_return(y, ys_ins);
             }
             break;
         case yi_popl:
             if (ra < yr_cnt && rb == yr_nil) {
-                YX(0x8D) YX(0x64) YX(0x24) YX(0x04) // leal 4(%esp), %esp
+                YX(0x58 + ra) // popl %ra
 
-                YX(0x8B) YX(y86_x_regbyte_8(ra, yri_esp)) // movl offset-4(%esp), $ra
-                YX(0x24) // Extra byte for %esp
-                YXA(&(y->mem[0]) - 4)
+                if (ra == yri_esp) {
+                    y86_gen_enesp(y);
+                }
+                /*if (ra == yri_esp) {
+                    YX(0x8D) YX(0x64) YX(0x24) YX(0x04) // leal 4(%esp), %esp
+
+                    YX(0x8B) YX(y86_x_regbyte_8(ra, yri_esp)) // movl offset-4(%esp), $ra
+                    YX(0x24) // Extra byte for %esp
+                    YXA(&(y->mem[0]) - 4)
+                } else {
+                }*/
             } else {
                 y86_gen_return(y, ys_ins);
             }
@@ -503,9 +588,12 @@ void y86_trace_pc(Y_data *y) {
 
 Y_word y86_trace_pc_2(Y_data *y, Y_word value) {
     Y_word index;
-    for (index = 0; index < Y_Y_INST_SIZE; ++index) {
-        if (value == (Y_word) y->x_map[index]) {
-            return index;
+
+    if (value >= (Y_word) &y->x_inst[0] && value < (Y_word) &y->x_inst[Y_X_INST_SIZE]) {
+        for (index = 0; index < Y_Y_INST_SIZE; ++index) {
+            if (value == (Y_word) y->x_map[index]) {
+                return index;
+            }
         }
     }
 
@@ -573,6 +661,8 @@ void y86_output_state(Y_data *y) {
 
 void y86_output_reg(Y_data *y) {
     Y_reg_lyt index;
+    Y_word value1;
+    Y_word value2;
 
     const Y_char *reg_names[yr_cnt] = {
         "%edi", "%esi", "%ebp", "%esp", "%ebx", "%edx", "%ecx", "%eax"
@@ -580,19 +670,27 @@ void y86_output_reg(Y_data *y) {
 
     fprintf(stdout, "Changes to registers:\n");
     for (index = yr_cnt - 1; (Y_word) index >= 0; --index) {
-        if (y->reg[index] != y->bak_reg[index]) {
-            fprintf(stdout, "%s:\t0x%.8x\t0x%.8x\n", reg_names[index], y->bak_reg[index], y->reg[index]);
+        value1 = y86_trace_pc_2(y, y->bak_reg[index]);
+        value2 = y86_trace_pc_2(y, y->reg[index]);
+
+        if (value1 != value2) {
+            fprintf(stdout, "%s:\t0x%.8x\t0x%.8x\n", reg_names[index], value1, value2);
         }
     }
 }
 
 void y86_output_mem(Y_data *y) {
     Y_word index;
+    Y_word value1;
+    Y_word value2;
 
     fprintf(stdout, "Changes to memory:\n");
     for (index = 0; index < Y_MEM_SIZE; index += 4) { // Y_MEM_SIZE = 4 * n
-        if (IO_WORD(&(y->bak_mem[index])) != IO_WORD(&(y->mem[index]))) {
-            fprintf(stdout, "0x%.4x:\t0x%.8x\t0x%.8x\n", index, IO_WORD(&(y->bak_mem[index])), IO_WORD(&(y->mem[index])));
+        value1 = y86_trace_pc_2(y, IO_WORD(&(y->bak_mem[index])));
+        value2 = y86_trace_pc_2(y, IO_WORD(&(y->mem[index])));
+
+        if (value1 != value2) {
+            fprintf(stdout, "0x%.4x:\t0x%.8x\t0x%.8x\n", index, value1, value2);
         }
     }
 }
