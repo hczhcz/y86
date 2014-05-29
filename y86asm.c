@@ -122,15 +122,15 @@ int add_symbol(char *name)
 
     /* check duplicate */
     if (find_symbol(name))
+    {
+        free(name);
         return 1;
+    }
 
     /* create new symbol_t (don't forget to free it)*/
     symnew = malloc(sizeof(symbol_t));
 
-    symnew->name = (char *)
-        malloc(sizeof(char) * (strlen(name) + 1));
-    strcpy(symnew->name, name);
-
+    symnew->name = name;
     symnew->next = symtab;
 
     /* add the new symbol_t to symbol table */
@@ -179,6 +179,10 @@ int add_reloc(char *name, bin_t *bin)
 #define IS_COMMENT(s) (*(s)=='#')
 #define IS_REG(s) (*(s)=='%')
 #define IS_IMM(s) (*(s)=='$')
+#define IS_DELIM(s) (*(s)==',')
+#define IS_LEFT(s) (*(s)=='(')
+#define IS_RIGHT(s) (*(s)==')')
+#define IS_LABEL(s) (*(s)==':')
 
 #define IS_BLANK(s) (*(s)==' ' || *(s)=='\t')
 #define IS_END(s) (*(s)=='\0')
@@ -246,7 +250,7 @@ parse_t parse_delim(char **ptr, char delim)
     if (IS_END(cur))
         return PARSE_ERR;
 
-    if (*cur != ',')
+    if (!IS_DELIM(cur))
         return PARSE_ERR;
 
     cur++;
@@ -284,8 +288,6 @@ parse_t parse_reg(char **ptr, regid_t *regid)
         return PARSE_ERR;
 
     cur += 4;
-    if (!IS_END(cur) && !IS_BLANK(cur))
-        return PARSE_ERR;
 
     /* set 'ptr' and 'regid' */
     *regid = tmp;
@@ -320,8 +322,6 @@ parse_t parse_symbol(char **ptr, char **name)
         return PARSE_ERR;
 
     cur += strlen(tmp->name);
-    if (!IS_END(cur) && !IS_BLANK(cur))
-        return PARSE_ERR;
 
     /* allocate name and copy to it */
 
@@ -356,9 +356,6 @@ parse_t parse_digit(char **ptr, long *value)
 
     /* calculate the digit, (NOTE: see strtoll()) */
     tmp = strtol(cur, &cur, 0);
-
-    if (!IS_END(cur) && !IS_BLANK(cur))
-        return PARSE_ERR;
 
     /* set 'ptr' and 'value' */
     *value = tmp;
@@ -434,12 +431,17 @@ parse_t parse_mem(char **ptr, long *value, regid_t *regid)
 
     /* calculate the digit and register, (ex: (%ebp) or 8(%ebp)) */
     parse_digit(ptr, &tmpl);
-    if (*cur != '(')
+
+    if (!IS_LEFT(cur))
         return PARSE_ERR;
+    cur++;
+
     if (parse_reg(ptr, &tmpr) == PARSE_ERR)
         return PARSE_ERR;
-    if (*cur != ')')
+
+    if (!IS_RIGHT(cur))
         return PARSE_ERR;
+    cur++;
 
     /* set 'ptr', 'value' and 'regid' */
     *value = tmpl;
@@ -499,13 +501,30 @@ parse_t parse_data(char **ptr, char **name, long *value)
  */
 parse_t parse_label(char **ptr, char **name)
 {
+    char *cur = *ptr;
+    char *tmp;
+
     /* skip the blank and check */
+    SKIP_BLANK(cur);
+    if (IS_END(cur))
+        return PARSE_ERR;
 
     /* allocate name and copy to it */
+    for (; IS_LETTER(cur); cur++);
+
+    tmp = (char *)
+        malloc(sizeof(char) * (cur - *ptr));
+    strncpy(tmp, *ptr, cur - *ptr);
+
+    if (!IS_LETTER(cur))
+        return PARSE_ERR;
+
+    cur++;
 
     /* set 'ptr' and 'name' */
-
-    return PARSE_ERR;
+    *ptr = cur;
+    *name = tmp;
+    return PARSE_LABEL;
 }
 
 /*
