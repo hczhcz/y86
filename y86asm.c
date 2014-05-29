@@ -99,7 +99,12 @@ symbol_t *symtab = NULL;
  */
 symbol_t *find_symbol(char *name)
 {
-    return NULL;
+    symbol_t *result = symtab;
+
+    while (result && !strcmp(result->name, name))
+        result = result->next;
+
+    return result;
 }
 
 /*
@@ -112,12 +117,24 @@ symbol_t *find_symbol(char *name)
  *     -1: error, the symbol has exist
  */
 int add_symbol(char *name)
-{    
+{
+    symbol_t *symnew;
+
     /* check duplicate */
+    if (find_symbol(name))
+        return 1;
 
     /* create new symbol_t (don't forget to free it)*/
+    symnew = malloc(sizeof(symbol_t));
+
+    symnew->name = (char *)
+        malloc(sizeof(char) * (strlen(name) + 1));
+    strcpy(symnew->name, name);
+
+    symnew->next = symtab;
 
     /* add the new symbol_t to symbol table */
+    symtab = symnew;
 
     return 0;
 }
@@ -132,13 +149,27 @@ reloc_t *reltab = NULL;
  *
  * return
  *     0: success
- *     -1: error, the symbol has exist
+ *     -1: error, the symbol has exist // TODO: What ???
  */
-void add_reloc(char *name, bin_t *bin)
+int add_reloc(char *name, bin_t *bin)
 {
+    reloc_t *relnew;
+
     /* create new reloc_t (don't forget to free it)*/
-    
+    relnew = (reloc_t *) malloc(sizeof(reloc_t));
+
+    relnew->y86bin = bin;
+
+    relnew->name = (char *)
+        malloc(sizeof(char) * (strlen(name) + 1));
+    strcpy(relnew->name, name);
+
+    relnew->next = reltab;
+
     /* add the new reloc_t to relocation table */
+    reltab = relnew;
+
+    return 0;
 }
 
 
@@ -158,7 +189,7 @@ void add_reloc(char *name, bin_t *bin)
 } while(0);
 
 /* return value from different parse_xxx function */
-typedef enum { PARSE_ERR=-1, PARSE_REG, PARSE_DIGIT, PARSE_SYMBOL, 
+typedef enum { PARSE_ERR=-1, PARSE_REG, PARSE_DIGIT, PARSE_SYMBOL,
     PARSE_MEM, PARSE_DELIM, PARSE_INSTR, PARSE_LABEL} parse_t;
 
 /*
@@ -208,11 +239,22 @@ parse_t parse_instr(char **ptr, instr_t **inst)
  */
 parse_t parse_delim(char **ptr, char delim)
 {
+    char *cur = *ptr;
+
     /* skip the blank and check */
+    SKIP_BLANK(cur);
+    if (IS_END(cur))
+        return PARSE_ERR;
+
+    if (*cur != ',')
+        return PARSE_ERR;
+
+    cur++;
 
     /* set 'ptr' */
+    *ptr = cur;
 
-    return PARSE_ERR;
+    return PARSE_DELIM;
 }
 
 /*
@@ -222,19 +264,33 @@ parse_t parse_delim(char **ptr, char delim)
  *     regid: point to the regid of register
  *
  * return
- *     PARSE_REG: success, move 'ptr' to the first char after token, 
+ *     PARSE_REG: success, move 'ptr' to the first char after token,
  *                         and store the regid to 'regid'
  *     PARSE_ERR: error, the value of 'ptr' and 'regid' are undefined
  */
 parse_t parse_reg(char **ptr, regid_t *regid)
 {
+    char *cur = *ptr;
+    regid_t tmp;
+
     /* skip the blank and check */
+    SKIP_BLANK(cur);
+    if (IS_END(cur))
+        return PARSE_ERR;
 
     /* find register */
+    tmp = find_register(cur);
+    if (tmp == REG_ERR)
+        return PARSE_ERR;
+
+    cur += 4;
+    if (!IS_END(cur) && !IS_BLANK(cur))
+        return PARSE_ERR;
 
     /* set 'ptr' and 'regid' */
-
-    return PARSE_ERR;
+    *regid = tmp;
+    *ptr = cur;
+    return PARSE_REG;
 }
 
 /*
@@ -250,13 +306,31 @@ parse_t parse_reg(char **ptr, regid_t *regid)
  */
 parse_t parse_symbol(char **ptr, char **name)
 {
+    char *cur = *ptr;
+    symbol_t *tmp;
+
     /* skip the blank and check */
+    SKIP_BLANK(cur);
+    if (IS_END(cur))
+        return PARSE_ERR;
+
+    /* find symbol */
+    tmp = find_symbol(cur);
+    if (tmp == NULL)
+        return PARSE_ERR;
+
+    cur += strlen(tmp->name);
+    if (!IS_END(cur) && !IS_BLANK(cur))
+        return PARSE_ERR;
 
     /* allocate name and copy to it */
 
-    /* set 'ptr' and 'name' */
+    // TODO: necessary?
 
-    return PARSE_ERR;
+    /* set 'ptr' and 'name' */
+    *name = tmp->name;
+    *ptr = cur;
+    return PARSE_SYMBOL;
 }
 
 /*
@@ -272,13 +346,24 @@ parse_t parse_symbol(char **ptr, char **name)
  */
 parse_t parse_digit(char **ptr, long *value)
 {
+    char *cur = *ptr;
+    long tmp;
+
     /* skip the blank and check */
+    SKIP_BLANK(cur);
+    if (IS_END(cur))
+        return PARSE_ERR;
 
     /* calculate the digit, (NOTE: see strtoll()) */
+    tmp = strtol(cur, &cur, 0);
+
+    if (!IS_END(cur) && !IS_BLANK(cur))
+        return PARSE_ERR;
 
     /* set 'ptr' and 'value' */
-
-    return PARSE_ERR;
+    *value = tmp;
+    *ptr = cur;
+    return PARSE_DIGIT;
 }
 
 /*
@@ -294,18 +379,31 @@ parse_t parse_digit(char **ptr, long *value)
  *                            and store the value of digit to 'value'
  *     PARSE_SYMBOL: success, the immediate token is a symbol,
  *                            move 'ptr' to the first char after token,
- *                            and allocate and store name to 'name' 
+ *                            and allocate and store name to 'name'
  *     PARSE_ERR: error, the value of 'ptr', 'name' and 'value' are undefined
  */
 parse_t parse_imm(char **ptr, char **name, long *value)
 {
+    char *cur = *ptr;
+
     /* skip the blank and check */
+    SKIP_BLANK(cur);
+    if (IS_END(cur))
+        return PARSE_ERR;
 
     /* if IS_IMM, then parse the digit */
+    if (IS_IMM(cur))
+    {
+        cur++;
+        return parse_digit(ptr, value);
+    }
 
     /* if IS_LETTER, then parse the symbol */
-    
+    if (IS_LETTER(cur))
+        return parse_symbol(ptr, name);
+
     /* set 'ptr' and 'name' or 'value' */
+    // Nothing
 
     return PARSE_ERR;
 }
@@ -325,13 +423,28 @@ parse_t parse_imm(char **ptr, char **name, long *value)
  */
 parse_t parse_mem(char **ptr, long *value, regid_t *regid)
 {
+    char *cur = *ptr;
+    long tmpl;
+    regid_t tmpr;
+
     /* skip the blank and check */
+    SKIP_BLANK(cur);
+    if (IS_END(cur))
+        return PARSE_ERR;
 
     /* calculate the digit and register, (ex: (%ebp) or 8(%ebp)) */
+    parse_digit(ptr, &tmpl);
+    if (*cur != '(')
+        return PARSE_ERR;
+    if (parse_reg(ptr, &tmpr) == PARSE_ERR)
+        return PARSE_ERR;
+    if (*cur != ')')
+        return PARSE_ERR;
 
     /* set 'ptr', 'value' and 'regid' */
-
-    return PARSE_ERR;
+    *value = tmpl;
+    *regid = tmpr;
+    return PARSE_MEM;
 }
 
 /*
@@ -347,18 +460,28 @@ parse_t parse_mem(char **ptr, long *value, regid_t *regid)
  *                            and store the value of digit to 'value'
  *     PARSE_SYMBOL: success, data token is a symbol,
  *                            and move 'ptr' to the first char after token,
- *                            and allocate and store name to 'name' 
+ *                            and allocate and store name to 'name'
  *     PARSE_ERR: error, the value of 'ptr', 'name' and 'value' are undefined
  */
 parse_t parse_data(char **ptr, char **name, long *value)
 {
+    char *cur = *ptr;
+
     /* skip the blank and check */
+    SKIP_BLANK(cur);
+    if (IS_END(cur))
+        return PARSE_ERR;
 
     /* if IS_DIGIT, then parse the digit */
+    if (IS_DIGIT(cur))
+        return parse_digit(ptr, value);
 
     /* if IS_LETTER, then parse the symbol */
+    if (IS_LETTER(cur))
+        return parse_symbol(ptr, name);
 
-    /* set 'ptr', 'name' and 'value' */
+    /* set 'ptr' and 'name' or 'value' */
+    // Nothing
 
     return PARSE_ERR;
 }
@@ -411,8 +534,8 @@ type_t parse_line(line_t *line)
     strcpy(y86asm, line->y86asm);
     cur = y86asm;
 
-/* when finish parse an instruction or lable, we still need to continue check 
-* e.g., 
+/* when finish parse an instruction or lable, we still need to continue check
+* e.g.,
 *  Loop: mrmovl (%ebp), %ecx
 *           call SUM  #invoke SUM function */
 cont:
@@ -421,7 +544,7 @@ cont:
     SKIP_BLANK(cur);
     if (IS_END(cur))
         goto out; /* done */
-    
+
     /* is a comment ? */
     if (IS_COMMENT(cur)) {
         goto out; /* skip rest */
@@ -460,7 +583,7 @@ cont:
     y86bin->codes[0] = inst->code;
     y86bin->bytes = inst->bytes;
 
-    /* update vmaddr */    
+    /* update vmaddr */
     vmaddr += inst->bytes;
 
     /* parse the rest of instruction according to the itype */
@@ -480,40 +603,40 @@ cont:
 
         goto cont;
       }
-   
+
       case I_RRMOVL:/* 2:x regA,regB - e.g., rrmovl %esp, %ebp */
       case I_ALU: { /* 6:x regA,regB - e.g., xorl %eax, %eax */
         goto cont;
       }
-      
+
       case I_IRMOVL: {  /* 3:0 Imm, regB - e.g., irmovl $-1, %ebx */
         goto cont;
       }
-      
+
       case I_RMMOVL: {  /* 4:0 regA, D(regB) - e.g., rmmovl %eax, 8(%esp)  */
         goto cont;
       }
-      
+
       case I_MRMOVL: {  /* 5:0 D(regB), regA - e.g., mrmovl 8(%ebp), %ecx */
         goto cont;
       }
-      
+
       case I_JMP:   /* 7:x dest - e.g., je End */
       case I_CALL: {/* 8:x dest - e.g., call Main */
         goto cont;
       }
-      
+
       case I_DIRECTIVE: {
         /* further partition directive according to dtv_t */
         switch (LOW(inst->code)) {
           case D_DATA: {    /* .long data - e.g., .long 0xC0 */
             goto cont;
           }
-          
+
           case D_POS: {   /* .pos D - e.g., .pos 0x100 */
             goto cont;
           }
-          
+
           case D_ALIGN: {   /* .align D - e.g., .align 4 */
             goto cont;
           }
@@ -554,7 +677,7 @@ int assemble(FILE *in)
     /* read y86 code line-by-line, and parse them to generate raw y86 binary code list */
     while (fgets(asm_buf, MAX_INSLEN, in) != NULL) {
         slen  = strlen(asm_buf);
-        if ((asm_buf[slen-1] == '\n') || (asm_buf[slen-1] == '\r')) { 
+        if ((asm_buf[slen-1] == '\n') || (asm_buf[slen-1] == '\r')) {
             asm_buf[--slen] = '\0'; /* replace terminator */
         }
 
@@ -595,7 +718,7 @@ int assemble(FILE *in)
 int relocate(void)
 {
     reloc_t *rtmp = NULL;
-    
+
     rtmp = reltab->next;
     while (rtmp) {
         /* find symbol */
@@ -622,13 +745,13 @@ int binfile(FILE *out)
     /* prepare image with y86 binary code */
 
     /* binary write y86 code to output file (NOTE: see fwrite()) */
-    
+
     return 0;
 }
 
 
 /* whether print the readable output to screen or not ? */
-bool_t screen = FALSE; 
+bool_t screen = FALSE;
 
 static void hexstuff(char *dest, int value, int len)
 {
@@ -649,9 +772,9 @@ void print_line(line_t *line)
     if (line->type == TYPE_INS) {
         bin_t *y86bin = &line->y86bin;
         int i;
-        
+
         strcpy(buf, "  0x000:              | ");
-        
+
         hexstuff(buf+4, y86bin->addr, 3);
         if (y86bin->bytes > 0)
             for (i = 0; i < y86bin->bytes; i++)
@@ -663,14 +786,14 @@ void print_line(line_t *line)
     printf("%s%s\n", buf, line->y86asm);
 }
 
-/* 
+/*
  * print_screen: dump readable binary and assembly code to screen
  * (e.g., Figure 4.8 in ICS book)
  */
 void print_screen(void)
 {
     line_t *tmp = y86bin_listhead->next;
-    
+
     /* line by line */
     while (tmp != NULL) {
         print_line(tmp);
@@ -698,16 +821,16 @@ void finit(void)
     reloc_t *rtmp = NULL;
     do {
         rtmp = reltab->next;
-        if (reltab->name) 
+        if (reltab->name)
             free(reltab->name);
         free(reltab);
         reltab = rtmp;
     } while (reltab);
-    
+
     symbol_t *stmp = NULL;
     do {
         stmp = symtab->next;
-        if (symtab->name) 
+        if (symtab->name)
             free(symtab->name);
         free(symtab);
         symtab = stmp;
@@ -716,7 +839,7 @@ void finit(void)
     line_t *ltmp = NULL;
     do {
         ltmp = y86bin_listhead->next;
-        if (y86bin_listhead->y86asm) 
+        if (y86bin_listhead->y86asm)
             free(y86bin_listhead->y86asm);
         free(y86bin_listhead);
         y86bin_listhead = ltmp;
@@ -737,10 +860,10 @@ int main(int argc, char *argv[])
     char outfname[512];
     int nextarg = 1;
     FILE *in = NULL, *out = NULL;
-    
+
     if (argc < 2)
         usage(argv[0]);
-    
+
     if (argv[nextarg][0] == '-') {
         char flag = argv[nextarg][1];
         switch (flag) {
@@ -758,7 +881,7 @@ int main(int argc, char *argv[])
     /* only support the .ys file */
     if (strcmp(argv[nextarg]+rootlen, ".ys"))
         usage(argv[0]);
-    
+
     if (rootlen > 500) {
         err_print("File name too long");
         exit(1);
@@ -768,7 +891,7 @@ int main(int argc, char *argv[])
     /* init */
     init();
 
-    
+
     /* assemble .ys file */
     strncpy(infname, argv[nextarg], rootlen);
     strcpy(infname+rootlen, ".ys");
@@ -777,7 +900,7 @@ int main(int argc, char *argv[])
         err_print("Can't open input file '%s'", infname);
         exit(1);
     }
-    
+
     if (assemble(in) < 0) {
         err_print("Assemble y86 code error");
         fclose(in);
@@ -808,10 +931,10 @@ int main(int argc, char *argv[])
         exit(1);
     }
     fclose(out);
-    
+
     /* print to screen (.yo file) */
     if (screen)
-       print_screen(); 
+       print_screen();
 
     /* finit */
     finit();
