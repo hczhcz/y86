@@ -101,8 +101,9 @@ symbol_t *find_symbol(char *name)
 {
     symbol_t *result = symtab;
 
-    while (result && !strcmp(result->name, name))
+    while (result && strcmp(result->name, name)) {
         result = result->next;
+    }
 
     return result;
 }
@@ -121,8 +122,7 @@ int add_symbol(char *name)
     symbol_t *symnew;
 
     /* check duplicate */
-    if (find_symbol(name))
-    {
+    if (find_symbol(name)) {
         free(name);
         return 1;
     }
@@ -131,6 +131,7 @@ int add_symbol(char *name)
     symnew = malloc(sizeof(symbol_t));
 
     symnew->name = name;
+    symnew->addr = vmaddr;
     symnew->next = symtab;
 
     /* add the new symbol_t to symbol table */
@@ -179,10 +180,6 @@ int add_reloc(char *name, bin_t *bin)
 #define IS_COMMENT(s) (*(s)=='#')
 #define IS_REG(s) (*(s)=='%')
 #define IS_IMM(s) (*(s)=='$')
-#define IS_DELIM(s) (*(s)==',')
-#define IS_LEFT(s) (*(s)=='(')
-#define IS_RIGHT(s) (*(s)==')')
-#define IS_LABEL(s) (*(s)==':')
 
 #define IS_BLANK(s) (*(s)==' ' || *(s)=='\t')
 #define IS_END(s) (*(s)=='\0')
@@ -250,7 +247,7 @@ parse_t parse_delim(char **ptr, char delim)
     if (IS_END(cur))
         return PARSE_ERR;
 
-    if (!IS_DELIM(cur))
+    if (*cur != delim)
         return PARSE_ERR;
 
     cur++;
@@ -309,7 +306,9 @@ parse_t parse_reg(char **ptr, regid_t *regid)
 parse_t parse_symbol(char **ptr, char **name)
 {
     char *cur = *ptr;
-    symbol_t *tmp;
+    char *cur1;
+    char *tmpn;
+    symbol_t *tmps;
 
     /* skip the blank and check */
     SKIP_BLANK(cur);
@@ -317,18 +316,25 @@ parse_t parse_symbol(char **ptr, char **name)
         return PARSE_ERR;
 
     /* find symbol */
-    tmp = find_symbol(cur);
-    if (tmp == NULL)
+    for (cur1 = cur; IS_LETTER(cur1); cur1++);
+
+    tmpn = (char *)
+        malloc(sizeof(char) * (cur1 - cur));
+    strncpy(tmpn, cur, cur1 - cur);
+    cur = cur1;
+
+    tmps = find_symbol(tmpn);
+    if (tmps == NULL)
         return PARSE_ERR;
 
-    cur += strlen(tmp->name);
+    free(tmpn);
 
     /* allocate name and copy to it */
 
     // TODO: necessary?
 
     /* set 'ptr' and 'name' */
-    *name = tmp->name;
+    *name = tmps->name;
     *ptr = cur;
     return PARSE_SYMBOL;
 }
@@ -389,18 +395,20 @@ parse_t parse_imm(char **ptr, char **name, long *value)
         return PARSE_ERR;
 
     /* if IS_IMM, then parse the digit */
-    if (IS_IMM(cur))
-    {
+    if (IS_IMM(cur)) {
         cur++;
+        *ptr = cur;
         return parse_digit(ptr, value);
     }
 
     /* if IS_LETTER, then parse the symbol */
-    if (IS_LETTER(cur))
+    if (IS_LETTER(cur)) {
+        *ptr = cur;
         return parse_symbol(ptr, name);
+    }
 
     /* set 'ptr' and 'name' or 'value' */
-    // Nothing
+    *ptr = cur;
 
     return PARSE_ERR;
 }
@@ -430,18 +438,17 @@ parse_t parse_mem(char **ptr, long *value, regid_t *regid)
         return PARSE_ERR;
 
     /* calculate the digit and register, (ex: (%ebp) or 8(%ebp)) */
-    parse_digit(ptr, &tmpl);
-
-    if (!IS_LEFT(cur))
-        return PARSE_ERR;
-    cur++;
-
-    if (parse_reg(ptr, &tmpr) == PARSE_ERR)
+    if (parse_digit(&cur, &tmpl) != PARSE_DIGIT)
         return PARSE_ERR;
 
-    if (!IS_RIGHT(cur))
+    if (parse_delim(&cur, '(') != PARSE_DELIM)
         return PARSE_ERR;
-    cur++;
+
+    if (parse_reg(&cur, &tmpr) != PARSE_REG)
+        return PARSE_ERR;
+
+    if (parse_delim(&cur, ')') != PARSE_DELIM)
+        return PARSE_ERR;
 
     /* set 'ptr', 'value' and 'regid' */
     *value = tmpl;
@@ -475,12 +482,16 @@ parse_t parse_data(char **ptr, char **name, long *value)
         return PARSE_ERR;
 
     /* if IS_DIGIT, then parse the digit */
-    if (IS_DIGIT(cur))
+    if (IS_DIGIT(cur)) {
+        *ptr = cur;
         return parse_digit(ptr, value);
+    }
 
     /* if IS_LETTER, then parse the symbol */
-    if (IS_LETTER(cur))
+    if (IS_LETTER(cur)) {
+        *ptr = cur;
         return parse_symbol(ptr, name);
+    }
 
     /* set 'ptr' and 'name' or 'value' */
     // Nothing
@@ -502,6 +513,7 @@ parse_t parse_data(char **ptr, char **name, long *value)
 parse_t parse_label(char **ptr, char **name)
 {
     char *cur = *ptr;
+    char *cur1;
     char *tmp;
 
     /* skip the blank and check */
@@ -510,16 +522,15 @@ parse_t parse_label(char **ptr, char **name)
         return PARSE_ERR;
 
     /* allocate name and copy to it */
-    for (; IS_LETTER(cur); cur++);
+    for (cur1 = cur; IS_LETTER(cur1); cur1++);
 
     tmp = (char *)
-        malloc(sizeof(char) * (cur - *ptr));
-    strncpy(tmp, *ptr, cur - *ptr);
+        malloc(sizeof(char) * (cur1 - cur));
+    strncpy(tmp, cur, cur1 - cur);
+    cur = cur1;
 
-    if (!IS_LETTER(cur))
+    if (parse_delim(&cur, ':') != PARSE_DELIM)
         return PARSE_ERR;
-
-    cur++;
 
     /* set 'ptr' and 'name' */
     *ptr = cur;
@@ -544,8 +555,13 @@ type_t parse_line(line_t *line)
     char *label = NULL;
     instr_t *inst = NULL;
 
+    regid_t ra, rb;
+    long val;
+    char *name;
+
     char *cur;
     int ret;
+    int align = 0;
 
     y86bin = &line->y86bin;
     y86asm = (char *)
@@ -603,7 +619,10 @@ cont:
     y86bin->bytes = inst->bytes;
 
     /* update vmaddr */
-    vmaddr += inst->bytes;
+    if (inst->code == HPACK(I_DIRECTIVE, D_DATA) && inst->bytes < align)
+        vmaddr += align;
+    else
+        vmaddr += inst->bytes;
 
     /* parse the rest of instruction according to the itype */
     switch (HIGH(inst->code)) {
@@ -617,31 +636,162 @@ cont:
       case I_PUSHL: /* A:0 regA:F - e.g., pushl %esp */
       case I_POPL: {/* B:0 regA:F - e.g., popl %ebp */
         /* parse register */
+        parse_reg(&cur, &ra);
 
         /* set y86bin codes */
+        y86bin->codes[1] = HPACK(ra, REG_NONE);
 
+        /* continue */
         goto cont;
       }
 
       case I_RRMOVL:/* 2:x regA,regB - e.g., rrmovl %esp, %ebp */
       case I_ALU: { /* 6:x regA,regB - e.g., xorl %eax, %eax */
+        /* parse */
+        ret = parse_reg(&cur, &ra);
+        if (ret != PARSE_REG) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        ret = parse_delim(&cur, ',');
+        if (ret != PARSE_DELIM) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        ret = parse_reg(&cur, &rb);
+        if (ret != PARSE_REG) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        /* set y86bin codes */
+        y86bin->codes[1] = HPACK(ra, rb);
+
+        /* continue */
         goto cont;
       }
 
       case I_IRMOVL: {  /* 3:0 Imm, regB - e.g., irmovl $-1, %ebx */
+        /* parse */
+        name = NULL;
+        ret = parse_imm(&cur, &name, &val);
+        if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        ret = parse_delim(&cur, ',');
+        if (ret != PARSE_DELIM) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        ret = parse_reg(&cur, &rb);
+        if (ret != PARSE_REG) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        /* set y86bin codes */
+        y86bin->codes[1] = HPACK(REG_NONE, rb);
+        *((long *) &y86bin->codes[2]) = val;
+
+        /* add y86bin reloc */
+        if (name)
+            add_reloc(name, y86bin);
+
+        /* continue */
         goto cont;
       }
 
       case I_RMMOVL: {  /* 4:0 regA, D(regB) - e.g., rmmovl %eax, 8(%esp)  */
+        /* parse */
+        ret = parse_reg(&cur, &ra);
+        if (ret != PARSE_REG) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        ret = parse_delim(&cur, ',');
+        if (ret != PARSE_DELIM) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        ret = parse_mem(&cur, &val, &rb);
+        if (ret != PARSE_MEM) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        /* set y86bin codes */
+        y86bin->codes[1] = HPACK(ra, rb);
+        *((long *) &y86bin->codes[2]) = val;
+
+        /* continue */
         goto cont;
       }
 
       case I_MRMOVL: {  /* 5:0 D(regB), regA - e.g., mrmovl 8(%ebp), %ecx */
+        /* parse */
+        ret = parse_mem(&cur, &val, &rb);
+        if (ret != PARSE_MEM) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        ret = parse_delim(&cur, ',');
+        if (ret != PARSE_DELIM) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        ret = parse_reg(&cur, &ra);
+        if (ret != PARSE_REG) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        /* set y86bin codes */
+        y86bin->codes[1] = HPACK(ra, rb);
+        *((long *) &y86bin->codes[2]) = val;
+
+        /* continue */
         goto cont;
       }
 
       case I_JMP:   /* 7:x dest - e.g., je End */
       case I_CALL: {/* 8:x dest - e.g., call Main */
+        /* parse */
+        name = NULL;
+        ret = parse_imm(&cur, &name, &val);
+        if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
+            line->type = TYPE_ERR;
+            err_print(""); // TODO
+            goto out;
+        }
+
+        /* add y86bin reloc */
+        add_reloc(name, y86bin);
+
+        /* set y86bin codes */
+        *((long *) &y86bin->codes[1]) = val;
+
+        /* continue */
         goto cont;
       }
 
@@ -649,14 +799,56 @@ cont:
         /* further partition directive according to dtv_t */
         switch (LOW(inst->code)) {
           case D_DATA: {    /* .long data - e.g., .long 0xC0 */
+            /* parse */
+            name = NULL;
+            ret = parse_imm(&cur, &name, &val);
+            if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
+                line->type = TYPE_ERR;
+                err_print(""); // TODO
+                goto out;
+            }
+
+            /* add y86bin reloc */
+            add_reloc(name, y86bin);
+
+            /* set y86bin data */
+            *((long *) &y86bin->codes[0]) = val;
+
+            /* continue */
             goto cont;
           }
 
           case D_POS: {   /* .pos D - e.g., .pos 0x100 */
+            /* parse */
+            name = NULL;
+            ret = parse_imm(&cur, &name, &val);
+            if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
+                line->type = TYPE_ERR;
+                err_print(""); // TODO
+                goto out;
+            }
+
+            /* set pos */
+            vmaddr = val;
+
+            /* continue */
             goto cont;
           }
 
           case D_ALIGN: {   /* .align D - e.g., .align 4 */
+            /* parse */
+            name = NULL;
+            ret = parse_imm(&cur, &name, &val);
+            if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
+                line->type = TYPE_ERR;
+                err_print(""); // TODO
+                goto out;
+            }
+
+            /* set align */
+            align = val;
+
+            /* continue */
             goto cont;
           }
           default:
@@ -736,13 +928,28 @@ int assemble(FILE *in)
  */
 int relocate(void)
 {
-    reloc_t *rtmp = NULL;
+    reloc_t *rtmp;
+    symbol_t *stmp;
 
-    rtmp = reltab->next;
+    rtmp = reltab;
     while (rtmp) {
         /* find symbol */
+        stmp = find_symbol(rtmp->name);
 
         /* relocate y86bin according itype */
+        switch (HIGH(rtmp->y86bin->codes[0])) {
+          case I_IRMOVL:
+            *((long *) &rtmp->y86bin->codes[2]) = stmp->addr;
+            break;
+          case I_JMP:
+          case I_CALL:
+            *((long *) &rtmp->y86bin->codes[1]) = stmp->addr;
+            break;
+          //case I_DIRECTIVE:
+          default:
+            *((long *) &rtmp->y86bin->codes[0]) = stmp->addr;
+            break;
+        }
 
         /* next */
         rtmp = rtmp->next;
@@ -761,9 +968,23 @@ int relocate(void)
  */
 int binfile(FILE *out)
 {
+    byte_t buf[2333];
+    byte_t size = 0;
+    line_t *tmp = y86bin_listhead->next;
+    bin_t *tmpb;
+
     /* prepare image with y86 binary code */
+    while (tmp != NULL) {
+        tmpb = &tmp->y86bin;
+        strncpy((char *) &buf[tmpb->addr], (char *) tmpb->codes, tmpb->bytes);
+        if (size < tmpb->addr + tmpb->bytes)
+            size = tmpb->addr + tmpb->bytes;
+
+        tmp = tmp->next;
+    }
 
     /* binary write y86 code to output file (NOTE: see fwrite()) */
+    fwrite(&buf, 1, size, out);
 
     return 0;
 }
@@ -823,11 +1044,11 @@ void print_screen(void)
 /* init and finit */
 void init(void)
 {
-    reltab = (reloc_t *)malloc(sizeof(reloc_t)); // free in finit
-    memset(reltab, 0, sizeof(reloc_t));
+    // reltab = (reloc_t *)malloc(sizeof(reloc_t)); // free in finit
+    // memset(reltab, 0, sizeof(reloc_t));
 
-    symtab = (symbol_t *)malloc(sizeof(symbol_t)); // free in finit
-    memset(symtab, 0, sizeof(symbol_t));
+    // symtab = (symbol_t *)malloc(sizeof(symbol_t)); // free in finit
+    // memset(symtab, 0, sizeof(symbol_t));
 
     y86bin_listhead = (line_t *)malloc(sizeof(line_t)); // free in finit
     memset(y86bin_listhead, 0, sizeof(line_t));
@@ -838,22 +1059,22 @@ void init(void)
 void finit(void)
 {
     reloc_t *rtmp = NULL;
-    do {
+    while (reltab) {
         rtmp = reltab->next;
         if (reltab->name)
             free(reltab->name);
         free(reltab);
         reltab = rtmp;
-    } while (reltab);
+    };
 
     symbol_t *stmp = NULL;
-    do {
+    while (reltab) {
         stmp = symtab->next;
         if (symtab->name)
             free(symtab->name);
         free(symtab);
         symtab = stmp;
-    } while (symtab);
+    };
 
     line_t *ltmp = NULL;
     do {
