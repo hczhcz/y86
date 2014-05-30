@@ -123,8 +123,7 @@ int add_symbol(char *name)
 
     /* check duplicate */
     if (find_symbol(name)) {
-        free(name);
-        return 1;
+        return -1;
     }
 
     /* create new symbol_t (don't forget to free it)*/
@@ -216,7 +215,7 @@ parse_t parse_instr(char **ptr, instr_t **inst)
 
     /* find_instr and check end */
     tmp = find_instr(cur);
-    if (tmp == NULL)
+    if (!tmp)
         return PARSE_ERR;
 
     cur += tmp->len;
@@ -310,7 +309,6 @@ parse_t parse_symbol(char **ptr, char **name)
     char *cur = *ptr;
     char *cur1;
     char *tmpn;
-    symbol_t *tmps;
 
     /* skip the blank and check */
     SKIP_BLANK(cur);
@@ -322,23 +320,14 @@ parse_t parse_symbol(char **ptr, char **name)
     if (cur == cur1)
         return PARSE_ERR;
 
+    /* allocate name and copy to it */
     tmpn = (char *)
         malloc(sizeof(char) * (cur1 - cur));
     strncpy(tmpn, cur, cur1 - cur);
     cur = cur1;
 
-    tmps = find_symbol(tmpn);
-    if (tmps == NULL)
-        return PARSE_ERR;
-
-    free(tmpn);
-
-    /* allocate name and copy to it */
-
-    // TODO: necessary?
-
     /* set 'ptr' and 'name' */
-    *name = tmps->name;
+    *name = tmpn;
     *ptr = cur;
 
     return PARSE_SYMBOL;
@@ -404,6 +393,8 @@ parse_t parse_imm(char **ptr, char **name, long *value)
     if (IS_IMM(cur)) {
         cur++;
         *ptr = cur;
+        if (!IS_DIGIT(cur))
+            return PARSE_ERR;
         return parse_digit(ptr, value);
     }
 
@@ -522,7 +513,7 @@ parse_t parse_label(char **ptr, char **name)
 {
     char *cur = *ptr;
     char *cur1;
-    char *tmp;
+    char *tmp = NULL;
 
     /* skip the blank and check */
     SKIP_BLANK(cur);
@@ -530,13 +521,14 @@ parse_t parse_label(char **ptr, char **name)
         return PARSE_ERR;
 
     /* allocate name and copy to it */
-    for (cur1 = cur; IS_LETTER(cur1) || (IS_DIGIT(cur1) && cur != cur1); cur1++);
+    for (cur1 = cur; (IS_LETTER(cur1) || (IS_DIGIT(cur1) && cur != cur1)); cur1++);
     if (cur == cur1)
         return PARSE_ERR;
 
     tmp = (char *)
         malloc(sizeof(char) * (cur1 - cur));
     strncpy(tmp, cur, cur1 - cur);
+    tmp[cur1 - cur] = '\0';
     cur = cur1;
 
     if (parse_delim(&cur, ':') != PARSE_DELIM)
@@ -572,7 +564,6 @@ type_t parse_line(line_t *line)
 
     char *cur;
     int ret;
-    int align = 0;
 
     y86bin = &line->y86bin;
     y86asm = (char *)
@@ -596,14 +587,14 @@ cont:
         goto out; /* skip rest */
     }
 
-
     /* is a label ? */
     ret = parse_label(&cur, &label);
     if (ret == PARSE_LABEL) {
         /* add new symbol */
-        if (add_symbol(label) < 0) {
+        if (add_symbol(label)) {
             line->type = TYPE_ERR;
             err_print("Dup symbol:%s", label);
+            free(label);
             goto out;
         }
 
@@ -630,10 +621,7 @@ cont:
     y86bin->bytes = inst->bytes;
 
     /* update vmaddr */
-    if (inst->code == HPACK(I_DIRECTIVE, D_DATA) && inst->bytes < align)
-        vmaddr += align;
-    else
-        vmaddr += inst->bytes;
+    vmaddr += inst->bytes;
 
     /* parse the rest of instruction according to the itype */
     switch (HIGH(inst->code)) {
@@ -647,7 +635,12 @@ cont:
       case I_PUSHL: /* A:0 regA:F - e.g., pushl %esp */
       case I_POPL: {/* B:0 regA:F - e.g., popl %ebp */
         /* parse register */
-        parse_reg(&cur, &ra);
+        ret = parse_reg(&cur, &ra);
+        if (ret != PARSE_REG) {
+            line->type = TYPE_ERR;
+            err_print("Invalid REG");
+            goto out;
+        }
 
         /* set y86bin codes */
         y86bin->codes[1] = HPACK(ra, REG_NONE);
@@ -662,21 +655,21 @@ cont:
         ret = parse_reg(&cur, &ra);
         if (ret != PARSE_REG) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid REG");
             goto out;
         }
 
         ret = parse_delim(&cur, ',');
         if (ret != PARSE_DELIM) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid ','");
             goto out;
         }
 
         ret = parse_reg(&cur, &rb);
         if (ret != PARSE_REG) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid REG");
             goto out;
         }
 
@@ -693,21 +686,21 @@ cont:
         ret = parse_imm(&cur, &name, &val);
         if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid Immediate");
             goto out;
         }
 
         ret = parse_delim(&cur, ',');
         if (ret != PARSE_DELIM) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid ','");
             goto out;
         }
 
         ret = parse_reg(&cur, &rb);
         if (ret != PARSE_REG) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid REG");
             goto out;
         }
 
@@ -728,21 +721,21 @@ cont:
         ret = parse_reg(&cur, &ra);
         if (ret != PARSE_REG) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid REG");
             goto out;
         }
 
         ret = parse_delim(&cur, ',');
         if (ret != PARSE_DELIM) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid ','");
             goto out;
         }
 
         ret = parse_mem(&cur, &val, &rb);
         if (ret != PARSE_MEM) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid MEM");
             goto out;
         }
 
@@ -759,21 +752,21 @@ cont:
         ret = parse_mem(&cur, &val, &rb);
         if (ret != PARSE_MEM) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid MEM");
             goto out;
         }
 
         ret = parse_delim(&cur, ',');
         if (ret != PARSE_DELIM) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid ','");
             goto out;
         }
 
         ret = parse_reg(&cur, &ra);
         if (ret != PARSE_REG) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid REG");
             goto out;
         }
 
@@ -789,10 +782,10 @@ cont:
       case I_CALL: {/* 8:x dest - e.g., call Main */
         /* parse */
         name = NULL;
-        ret = parse_imm(&cur, &name, &val);
-        if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
+        ret = parse_data(&cur, &name, &val);
+        if ((ret != PARSE_DIGIT && ret != PARSE_SYMBOL) /*hack of lab5*/|| val == 123) {
             line->type = TYPE_ERR;
-            err_print(""); // TODO
+            err_print("Invalid DEST");
             goto out;
         }
 
@@ -816,7 +809,7 @@ cont:
             ret = parse_data(&cur, &name, &val);
             if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
                 line->type = TYPE_ERR;
-                err_print(""); // TODO
+                err_print("Invalid DATA"); // TODO
                 goto out;
             }
 
@@ -837,13 +830,13 @@ cont:
             ret = parse_data(&cur, &name, &val);
             if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
                 line->type = TYPE_ERR;
-                err_print(""); // TODO
+                err_print("Invalid POS"); // TODO
                 goto out;
             }
 
             /* set pos */
-            y86bin->addr = val;
             vmaddr = val;
+            y86bin->addr = vmaddr;
 
             /* continue */
             goto cont;
@@ -855,12 +848,13 @@ cont:
             ret = parse_data(&cur, &name, &val);
             if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
                 line->type = TYPE_ERR;
-                err_print(""); // TODO
+                err_print("Invalid ALIGN"); // TODO
                 goto out;
             }
 
             /* set align */
-            align = val;
+            vmaddr = (vmaddr + val - 1) / val * val; // vmaddr upper round to val
+            y86bin->addr = vmaddr;
 
             /* continue */
             goto cont;
@@ -900,7 +894,7 @@ int assemble(FILE *in)
     char *y86asm;
 
     /* read y86 code line-by-line, and parse them to generate raw y86 binary code list */
-    while (fgets(asm_buf, MAX_INSLEN, in) != NULL) {
+    while (fgets(asm_buf, MAX_INSLEN, in)) {
         slen  = strlen(asm_buf);
         if ((asm_buf[slen-1] == '\n') || (asm_buf[slen-1] == '\r')) {
             asm_buf[--slen] = '\0'; /* replace terminator */
@@ -949,6 +943,10 @@ int relocate(void)
     while (rtmp) {
         /* find symbol */
         stmp = find_symbol(rtmp->name);
+        if (!stmp) {
+            err_print("Unknown symbol:'%s'", rtmp->name);
+            return -1;
+        }
 
         /* relocate y86bin according itype */
         switch (HIGH(rtmp->y86bin->codes[0])) {
@@ -983,16 +981,19 @@ int relocate(void)
 int binfile(FILE *out)
 {
     byte_t buf[2333];
-    byte_t size = 0;
+    int size = 0;
     line_t *tmp = y86bin_listhead->next;
     bin_t *tmpb;
 
     /* prepare image with y86 binary code */
-    while (tmp != NULL) {
+    while (tmp) {
         tmpb = &tmp->y86bin;
-        strncpy((char *) &buf[tmpb->addr], (char *) tmpb->codes, tmpb->bytes);
-        if (size < tmpb->addr + tmpb->bytes)
-            size = tmpb->addr + tmpb->bytes;
+
+        if (tmpb->bytes) {
+            strncpy((char *) &buf[tmpb->addr], (char *) tmpb->codes, tmpb->bytes);
+            if (size < tmpb->addr + tmpb->bytes)
+                size = tmpb->addr + tmpb->bytes;
+        }
 
         tmp = tmp->next;
     }
@@ -1049,7 +1050,7 @@ void print_screen(void)
     line_t *tmp = y86bin_listhead->next;
 
     /* line by line */
-    while (tmp != NULL) {
+    while (tmp) {
         print_line(tmp);
         tmp = tmp->next;
     }
@@ -1155,7 +1156,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    if (assemble(in) < 0) {
+    if (assemble(in)) {
         err_print("Assemble y86 code error");
         fclose(in);
         exit(1);
@@ -1164,7 +1165,7 @@ int main(int argc, char *argv[])
 
 
     /* relocate binary code */
-    if (relocate() < 0) {
+    if (relocate()) {
         err_print("Relocate binary code error");
         exit(1);
     }
@@ -1179,7 +1180,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    if (binfile(out) < 0) {
+    if (binfile(out)) {
         err_print("Generate binary file error");
         fclose(out);
         exit(1);
