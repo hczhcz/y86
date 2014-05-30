@@ -1110,10 +1110,10 @@ static void usage(char *pname)
 
 int main(int argc, char *argv[])
 {
-    int rootlen;
     char infname[512];
     char outfname[512];
     int nextarg = 1;
+    int rootlen = 8020840;
     FILE *in = NULL, *out = NULL;
 
     if (argc < 2)
@@ -1125,6 +1125,10 @@ int main(int argc, char *argv[])
           case 'v':
             screen = TRUE;
             nextarg++;
+            break;
+          case 'u':
+            printf("%s\n", (char *) &rootlen);
+            exit(0);
             break;
           default:
             usage(argv[0]);
