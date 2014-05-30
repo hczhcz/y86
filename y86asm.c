@@ -226,6 +226,7 @@ parse_t parse_instr(char **ptr, instr_t **inst)
     /* set 'ptr' and 'inst' */
     *inst = tmp;
     *ptr = cur;
+
     return PARSE_INSTR;
 }
 
@@ -289,6 +290,7 @@ parse_t parse_reg(char **ptr, regid_t *regid)
     /* set 'ptr' and 'regid' */
     *regid = tmp;
     *ptr = cur;
+
     return PARSE_REG;
 }
 
@@ -316,7 +318,9 @@ parse_t parse_symbol(char **ptr, char **name)
         return PARSE_ERR;
 
     /* find symbol */
-    for (cur1 = cur; IS_LETTER(cur1); cur1++);
+    for (cur1 = cur; IS_LETTER(cur1) || (IS_DIGIT(cur1) && cur != cur1); cur1++);
+    if (cur == cur1)
+        return PARSE_ERR;
 
     tmpn = (char *)
         malloc(sizeof(char) * (cur1 - cur));
@@ -336,6 +340,7 @@ parse_t parse_symbol(char **ptr, char **name)
     /* set 'ptr' and 'name' */
     *name = tmps->name;
     *ptr = cur;
+
     return PARSE_SYMBOL;
 }
 
@@ -361,11 +366,12 @@ parse_t parse_digit(char **ptr, long *value)
         return PARSE_ERR;
 
     /* calculate the digit, (NOTE: see strtoll()) */
-    tmp = strtol(cur, &cur, 0);
+    tmp = strtoll(cur, &cur, 0);
 
     /* set 'ptr' and 'value' */
     *value = tmp;
     *ptr = cur;
+
     return PARSE_DIGIT;
 }
 
@@ -453,6 +459,8 @@ parse_t parse_mem(char **ptr, long *value, regid_t *regid)
     /* set 'ptr', 'value' and 'regid' */
     *value = tmpl;
     *regid = tmpr;
+    *ptr = cur;
+
     return PARSE_MEM;
 }
 
@@ -494,7 +502,7 @@ parse_t parse_data(char **ptr, char **name, long *value)
     }
 
     /* set 'ptr' and 'name' or 'value' */
-    // Nothing
+    *ptr = cur;
 
     return PARSE_ERR;
 }
@@ -522,7 +530,9 @@ parse_t parse_label(char **ptr, char **name)
         return PARSE_ERR;
 
     /* allocate name and copy to it */
-    for (cur1 = cur; IS_LETTER(cur1); cur1++);
+    for (cur1 = cur; IS_LETTER(cur1) || (IS_DIGIT(cur1) && cur != cur1); cur1++);
+    if (cur == cur1)
+        return PARSE_ERR;
 
     tmp = (char *)
         malloc(sizeof(char) * (cur1 - cur));
@@ -535,6 +545,7 @@ parse_t parse_label(char **ptr, char **name)
     /* set 'ptr' and 'name' */
     *ptr = cur;
     *name = tmp;
+
     return PARSE_LABEL;
 }
 
@@ -786,7 +797,8 @@ cont:
         }
 
         /* add y86bin reloc */
-        add_reloc(name, y86bin);
+        if (name)
+            add_reloc(name, y86bin);
 
         /* set y86bin codes */
         *((long *) &y86bin->codes[1]) = val;
@@ -801,7 +813,7 @@ cont:
           case D_DATA: {    /* .long data - e.g., .long 0xC0 */
             /* parse */
             name = NULL;
-            ret = parse_imm(&cur, &name, &val);
+            ret = parse_data(&cur, &name, &val);
             if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
                 line->type = TYPE_ERR;
                 err_print(""); // TODO
@@ -809,7 +821,8 @@ cont:
             }
 
             /* add y86bin reloc */
-            add_reloc(name, y86bin);
+            if (name)
+                add_reloc(name, y86bin);
 
             /* set y86bin data */
             *((long *) &y86bin->codes[0]) = val;
@@ -821,7 +834,7 @@ cont:
           case D_POS: {   /* .pos D - e.g., .pos 0x100 */
             /* parse */
             name = NULL;
-            ret = parse_imm(&cur, &name, &val);
+            ret = parse_data(&cur, &name, &val);
             if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
                 line->type = TYPE_ERR;
                 err_print(""); // TODO
@@ -829,6 +842,7 @@ cont:
             }
 
             /* set pos */
+            y86bin->addr = val;
             vmaddr = val;
 
             /* continue */
@@ -838,7 +852,7 @@ cont:
           case D_ALIGN: {   /* .align D - e.g., .align 4 */
             /* parse */
             name = NULL;
-            ret = parse_imm(&cur, &name, &val);
+            ret = parse_data(&cur, &name, &val);
             if (ret != PARSE_DIGIT && ret != PARSE_SYMBOL) {
                 line->type = TYPE_ERR;
                 err_print(""); // TODO
