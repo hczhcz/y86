@@ -308,7 +308,7 @@ parse_t parse_symbol(char **ptr, char **name)
 {
     char *cur = *ptr;
     char *cur1;
-    char *tmpn;
+    char *tmp;
 
     /* skip the blank and check */
     SKIP_BLANK(cur);
@@ -321,13 +321,13 @@ parse_t parse_symbol(char **ptr, char **name)
         return PARSE_ERR;
 
     /* allocate name and copy to it */
-    tmpn = (char *)
+    tmp = (char *)
         malloc(sizeof(char) * (cur1 - cur));
-    strncpy(tmpn, cur, cur1 - cur);
+    strncpy(tmp, cur, cur1 - cur);
     cur = cur1;
 
     /* set 'ptr' and 'name' */
-    *name = tmpn;
+    *name = tmp;
     *ptr = cur;
 
     return PARSE_SYMBOL;
@@ -426,8 +426,8 @@ parse_t parse_imm(char **ptr, char **name, long *value)
 parse_t parse_mem(char **ptr, long *value, regid_t *regid)
 {
     char *cur = *ptr;
-    long tmpl;
-    regid_t tmpr;
+    long ltmp;
+    regid_t rtmp;
 
     /* skip the blank and check */
     SKIP_BLANK(cur);
@@ -435,21 +435,21 @@ parse_t parse_mem(char **ptr, long *value, regid_t *regid)
         return PARSE_ERR;
 
     /* calculate the digit and register, (ex: (%ebp) or 8(%ebp)) */
-    if (parse_digit(&cur, &tmpl) != PARSE_DIGIT)
+    if (parse_digit(&cur, &ltmp) != PARSE_DIGIT)
         return PARSE_ERR;
 
     if (parse_delim(&cur, '(') != PARSE_DELIM)
         return PARSE_ERR;
 
-    if (parse_reg(&cur, &tmpr) != PARSE_REG)
+    if (parse_reg(&cur, &rtmp) != PARSE_REG)
         return PARSE_ERR;
 
     if (parse_delim(&cur, ')') != PARSE_DELIM)
         return PARSE_ERR;
 
     /* set 'ptr', 'value' and 'regid' */
-    *value = tmpl;
-    *regid = tmpr;
+    *value = ltmp;
+    *regid = rtmp;
     *ptr = cur;
 
     return PARSE_MEM;
@@ -982,20 +982,20 @@ int binfile(FILE *out)
 {
     byte_t buf[2333];
     int size = 0;
-    line_t *tmp = y86bin_listhead->next;
-    bin_t *tmpb;
+    line_t *ltmp = y86bin_listhead->next;
+    bin_t *btmp;
 
     /* prepare image with y86 binary code */
-    while (tmp) {
-        tmpb = &tmp->y86bin;
+    while (ltmp) {
+        btmp = &ltmp->y86bin;
 
-        if (tmpb->bytes) {
-            strncpy((char *) &buf[tmpb->addr], (char *) tmpb->codes, tmpb->bytes);
-            if (size < tmpb->addr + tmpb->bytes)
-                size = tmpb->addr + tmpb->bytes;
+        if (btmp->bytes) {
+            memcpy((char *) &buf[btmp->addr], (char *) btmp->codes, btmp->bytes);
+            if (size < btmp->addr + btmp->bytes)
+                size = btmp->addr + btmp->bytes;
         }
 
-        tmp = tmp->next;
+        ltmp = ltmp->next;
     }
 
     /* binary write y86 code to output file (NOTE: see fwrite()) */
