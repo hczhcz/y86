@@ -10,7 +10,7 @@ Y86 is a simplified x86-like instruction set.
 
 `EAX ECX EDX EBX ESP EBP ESI EDI`
 
-4 States:
+4 states:
 
 `AOK HLT ADR INS`
 
@@ -86,3 +86,31 @@ Build:
 Run:
 
 `y86sim file.bin [max_steps]`
+
+The 'max' version looks like the normal one, but there is no step counting and non-static error detecting in it.
+
+Y86 Assembler
+---
+
+This is also a 'lab' in SE101/ICS.
+
+The implementation is based on the original framework in the course.
+
+Build:
+
+`cc -m32 -o y86asm y86asm.c` (recommended cc: clang)
+
+Run:
+
+`y86asm [-v] file.ys`
+
+`-v` print the readable output to screen.
+
+License
+---
+
+The simulator is released under WTFPL. Keep calm and have fun with it :)
+
+The others are not released under any license, so they can be used in education purpose only.
+
+DO NOT CHEAT! The code is stored in the anti-cheating code base. You know.
