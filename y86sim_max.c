@@ -168,11 +168,12 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             break;
         case yi_irmovl:
             if (ra == yr_nil && rb < yr_cnt) {
-                YX(0xB8 + rb) YXW(val) // movl ...
+                YX(0xB8 + rb) YXW(rb == yri_esp ? val + (Y_word) &y->mem[0] : val) // movl ...
 
-                if (rb == yri_esp) {
-                    y86_gen_enesp(y);
-                }
+                // No longer necessary
+                // if (rb == yri_esp) {
+                //     y86_gen_enesp(y);
+                // }
             } else {
                 y86_gen_return(y, ys_ins);
             }
@@ -214,46 +215,46 @@ void y86_gen_x(Y_data *y, Y_inst op, Y_reg_id ra, Y_reg_id rb, Y_word val) {
             if (ra < yr_cnt && rb < yr_cnt) {
                 switch (op) {
                     case yi_addl:
-                        if (ra == yri_esp) {
+                        if (ra == yri_esp || rb == yri_esp) {
                             y86_gen_deesp(y);
                         }
 
                         YX(0x01) YX(y86_x_regbyte_C(ra, rb)) // addl ...
 
-                        if (ra == yri_esp) {
+                        if (ra == yri_esp || rb == yri_esp) {
                             y86_gen_enesp(y);
                         }
                         break;
                     case yi_subl:
-                        if (ra == yri_esp) {
+                        if ((ra == yri_esp) != (rb == yri_esp)) {
                             y86_gen_deesp(y);
                         }
 
                         YX(0x29) YX(y86_x_regbyte_C(ra, rb)) // subl ...
 
-                        if (ra == yri_esp) {
+                        if ((ra == yri_esp) != (rb == yri_esp)) {
                             y86_gen_enesp(y);
                         }
                         break;
                     case yi_andl:
-                        if ((ra == yri_esp) != (rb == yri_esp)) {
+                        if (ra == yri_esp || rb == yri_esp) {
                             y86_gen_deesp(y);
                         }
 
                         YX(0x21) YX(y86_x_regbyte_C(ra, rb)) // andl ...
 
-                        if ((ra == yri_esp) != (rb == yri_esp)) {
+                        if (ra == yri_esp || rb == yri_esp) {
                             y86_gen_enesp(y);
                         }
                         break;
                     case yi_xorl:
-                        if ((ra == yri_esp) || (rb == yri_esp)) {
+                        if ((ra == yri_esp) != (rb == yri_esp)) {
                             y86_gen_deesp(y);
                         }
 
                         YX(0x31) YX(y86_x_regbyte_C(ra, rb)) // xorl ...
 
-                        if ((ra == yri_esp) || (rb == yri_esp)) {
+                        if ((ra == yri_esp) != (rb == yri_esp)) {
                             y86_gen_enesp(y);
                         }
                         break;
