@@ -81,13 +81,18 @@ The original version is a 'pure' simulator, but I made a JIT compiler.
 
 Build:
 
-`cc -m32 -o y86sim y86sim.c` (recommended cc: clang)
+`cc -m32 -o y86sim y86sim.c` (tested under Clang 3.2+)
 
 Run:
 
 `y86sim file.bin [max_steps]`
 
+Y86 Simulator (the 'max' version)
+---
+
 The 'max' version looks like the normal one, but there is no step counting and non-static error detecting in it.
+
+It could execute most cases correctly and run (almost) as fast as native x86. But, it could not pass the ICS lab tests.
 
 Y86 Assembler
 ---
@@ -98,7 +103,7 @@ The implementation is based on the original framework in the course.
 
 Build:
 
-`cc -m32 -o y86asm y86asm.c` (recommended cc: clang)
+`cc -m32 -o y86asm y86asm.c` (tested under Clang 3.2+)
 
 Run:
 
@@ -109,8 +114,8 @@ Run:
 License
 ---
 
-The simulator is released under WTFPL. Keep calm and have fun with it :)
+The simulator is released under WTFPL. Keep calm and have fun with it :) Feel free to send issues and PR to me.
 
-The others are not released under any license, so they can be used in education purpose only.
+The assembler and the lab tests are not released under any license, so they can be used in education purpose only.
 
-DO NOT CHEAT! The code is stored in the anti-cheating code base. You know.
+To SE101 students: DO NOT CHEAT! The code is stored in the anti-cheating code base. You know.
