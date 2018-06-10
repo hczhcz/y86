@@ -75,7 +75,7 @@ For more details: Chapter 4 of [CSAPP](http://csapp.cs.cmu.edu/)
 Y86 Simulator
 ---
 
-This is a 'lab' (homework) in SE101/ICS (Introduction to Comupter Systems).
+This is a 'lab' (homework) in SE101/ICS (Introduction to Computer Systems).
 
 The original version is a 'pure' simulator, but I made a JIT compiler.
 
